@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>空き日程｜嶋﨑迦一</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1d1d1f;--sub:#6b6b70;--line:#e4e4e0;--free:#2f9e6b;--free-bg:#e3f4ec;--busy:#ececea;--accent:#1a5fd0}
+@media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1e1e21;--ink:#f2f2f2;--sub:#a0a0a6;--line:#2e2e33;--free:#4cc38a;--free-bg:#173327;--busy:#2a2a2e;--accent:#7aa7ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;line-height:1.6}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.35rem;margin:0 0 4px}
+.lead{color:var(--sub);font-size:.9rem;margin:0 0 20px}
+.nav{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 12px;font-size:.9rem;cursor:pointer}
+.nav button:hover{border-color:var(--accent)}
+.nav .range{font-weight:600;margin-left:auto}
+.day{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.day.past{opacity:.45}
+.dh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.date{font-weight:600}
+.date .w{color:var(--sub);font-weight:400;margin-left:4px}
+.date .w.sun{color:#d14b4b}.date .w.sat{color:#3f73d9}
+.bar{position:relative;height:10px;border-radius:5px;background:var(--busy);overflow:hidden;margin-bottom:8px}
+.bar i{position:absolute;top:0;bottom:0;background:var(--free)}
+.ticks{display:flex;justify-content:space-between;color:var(--sub);font-size:.7rem;margin:-4px 0 8px}
+.slots{display:flex;flex-wrap:wrap;gap:6px}
+.slot{background:var(--free-bg);color:var(--free);border-radius:999px;padding:3px 10px;font-size:.9rem;font-variant-numeric:tabular-nums;font-weight:600}
+.none{color:var(--sub);font-size:.9rem}
+.msg{color:var(--sub);text-align:center;padding:32px 0}
+footer{color:var(--sub);font-size:.8rem;margin-top:24px}
+</style>
+</head>
+<body>
+<main>
+  <h1>空き日程（嶋﨑迦一）</h1>
+  <p class="lead">緑の時間帯が空いています。時刻はすべて日本時間です。カレンダーに予定が入ると自動で更新されます。</p>
+  <div class="nav">
+    <button id="prev" aria-label="前の週">← 前の週</button>
+    <button id="today">今週</button>
+    <button id="next" aria-label="次の週">次の週 →</button>
+    <span class="range" id="range"></span>
+  </div>
+  <div id="days"><p class="msg">読み込み中…</p></div>
+  <footer>ご希望の日時をお知らせください。この画面からの予約はできません。</footer>
+</main>
+<script>
+const API = "https://lgjguacnsditdemcnvqy.supabase.co/functions/v1/akibi-sync";
+const KEY = location.hash.replace(/^#/, "");
+const W = ["日","月","火","水","木","金","土"];
+const DAY = 86400000, JST = 9 * 3600000;
+
+// 日本時間の日付を扱う（ブラウザの時刻設定に左右されないよう、UTC+9 に固定して計算）
+const jstDay = ms => Math.floor((ms + JST) / DAY);                // 日本時間の通し日数
+const ymd = d => new Date(d * DAY).toISOString().slice(0, 10);    // 通し日数 → YYYY-MM-DD
+const parse = s => Date.parse(s + "+09:00");                       // "YYYY-MM-DDTHH:MM:SS"（日本時間）→ ms
+const hm = ms => { const t = new Date(ms + JST); return t.getUTCHours() + ":" + String(t.getUTCMinutes()).padStart(2, "0"); };
+
+const today = jstDay(Date.now());
+const mondayOf = d => d - ((new Date(d * DAY).getUTCDay() + 6) % 7);
+let weekStart = mondayOf(today);
+
+async function load() {
+  const days = document.getElementById("days");
+  const from = weekStart, to = weekStart + 7;
+  const [a, b] = [new Date(from * DAY), new Date((to - 1) * DAY)];
+  document.getElementById("range").textContent = `${a.getUTCMonth() + 1}/${a.getUTCDate()} 〜 ${b.getUTCMonth() + 1}/${b.getUTCDate()}`;
+  document.getElementById("prev").disabled = weekStart <= mondayOf(today);
+  if (!KEY) { days.innerHTML = '<p class="msg">URLが正しくありません。送られてきたURLをそのまま開いてください。</p>'; return; }
+  days.innerHTML = '<p class="msg">読み込み中…</p>';
+  try {
+    const r = await fetch(`${API}?action=public&k=${encodeURIComponent(KEY)}&from=${ymd(from)}&to=${ymd(to)}`);
+    if (r.status === 403) throw new Error("URLが正しくないか、公開が終了しています。");
+    if (!r.ok) throw new Error("読み込めませんでした。少し待ってから再読み込みしてください。");
+    render((await r.json()).bands.map(x => [parse(x.s), parse(x.e)]), from, to);
+  } catch (e) {
+    days.innerHTML = `<p class="msg">${e.message}</p>`;
+  }
+}
+
+function render(bands, from, to) {
+  const out = [];
+  for (let d = from; d < to; d++) {
+    const s = (d * DAY) - JST, e = s + DAY;                         // その日の0:00〜24:00（日本時間）
+    const parts = bands.filter(([a, b]) => a < e && b > s).map(([a, b]) => [Math.max(a, s), Math.min(b, e)]);
+    const dow = new Date(d * DAY).getUTCDay();
+    const past = d < today;
+    const bar = parts.map(([a, b]) => `<i style="left:${(a - s) / DAY * 100}%;width:${(b - a) / DAY * 100}%"></i>`).join("");
+    const label = ([a, b]) => (b - a >= DAY ? "終日" : `${hm(a)}〜${b === e ? "24:00" : hm(b)}`);
+    const slots = past ? '<span class="none">過ぎた日です</span>'
+      : parts.length ? parts.map(p => `<span class="slot">${label(p)}</span>`).join("")
+      : '<span class="none">空きなし</span>';
+    out.push(`<section class="day${past ? " past" : ""}">
+      <div class="dh"><span class="date">${new Date(d * DAY).getUTCMonth() + 1}/${new Date(d * DAY).getUTCDate()}<span class="w ${dow === 0 ? "sun" : dow === 6 ? "sat" : ""}">(${W[dow]})</span></span></div>
+      <div class="bar">${past ? "" : bar}</div>
+      <div class="ticks"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>
+      <div class="slots">${slots}</div></section>`);
+  }
+  document.getElementById("days").innerHTML = out.join("");
+}
+
+document.getElementById("prev").onclick = () => { weekStart -= 7; load(); };
+document.getElementById("next").onclick = () => { weekStart += 7; load(); };
+document.getElementById("today").onclick = () => { weekStart = mondayOf(today); load(); };
+load();
+</script>
+</body>
+</html>
