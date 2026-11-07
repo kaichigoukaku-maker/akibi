@@ -241,20 +241,45 @@ let jaVoice = null;
 function pickVoice() { const vs = speechSynthesis.getVoices(); jaVoice = vs.find(v => v.name.includes('Kyoko')) || vs.find(v => v.lang === 'ja-JP') || null;
   $('#voicename').textContent = jaVoice ? jaVoice.name.split(' ')[0].toUpperCase().slice(0, 10) : 'SYSTEM'; }
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+// Macで開いた時は Mac本体の声（say）でしゃべる。ブラウザの読み上げは Chrome で止まることがあるため。
+// スマホではブラウザの読み上げを使う。
+const MAC_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+let sayPending = 0, saySpeaking = false;
+const keep = []; // 読み上げ途中で消されないよう保持（Chromeの不具合対策）
 function speak(text) {
-  if (!voiceOn || !('speechSynthesis' in window) || !text.trim()) return;
+  if (!voiceOn || !text.trim()) return;
+  if (MAC_LOCAL) {
+    sayPending++; saySpeaking = true;
+    fetch('/api/say', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ text }) })
+      .catch(() => {}).finally(() => sayPending--);
+    return;
+  }
+  if (!('speechSynthesis' in window)) return;
   const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.15; if (jaVoice) u.voice = jaVoice;
-  speechSynthesis.speak(u);
+  keep.push(u); u.onend = u.onerror = () => keep.splice(keep.indexOf(u), 1);
+  speechSynthesis.resume(); speechSynthesis.speak(u);
 }
+function stopSpeech() {
+  if (MAC_LOCAL) { saySpeaking = false; fetch('/api/say_stop', { method:'POST' }).catch(() => {}); return; }
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+function isSpeaking() {
+  if (MAC_LOCAL) return sayPending > 0 || saySpeaking;
+  return 'speechSynthesis' in window && (speechSynthesis.speaking || speechSynthesis.pending);
+}
+setInterval(async () => { // Mac本体が話し終えたかを確かめる
+  if (!MAC_LOCAL || !saySpeaking || sayPending) return;
+  try { saySpeaking = (await (await fetch('/api/say_status')).json()).speaking; } catch (e) { saySpeaking = false; }
+}, 300);
 let unlocked = false;
 function unlockAudio() { // iPhoneは最初のタップで読み上げを解錠しておく
-  if (unlocked || !('speechSynthesis' in window)) return; unlocked = true;
-  const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u);
+  if (MAC_LOCAL || unlocked || !('speechSynthesis' in window)) return; unlocked = true;
+  const u = new SpeechSynthesisUtterance('。'); u.volume = 0; speechSynthesis.speak(u);
 }
 async function waitSpeechEnd() {
-  if (!('speechSynthesis' in window)) return;
-  await sleep(150);
-  while (speechSynthesis.speaking || speechSynthesis.pending) await sleep(150);
+  await sleep(400);
+  const until = Date.now() + 120000; // 念のため2分で打ち切る
+  while (isSpeaking() && Date.now() < until) await sleep(150);
   await sleep(350); // 読み上げの残響を拾わないよう少し待つ
 }
 function chime() { // 相談モードで「どうぞ」の合図。小さく短く
@@ -318,7 +343,7 @@ async function send(text) {
   busy = true;
   add('me', text); $('#heard').textContent = '「' + text + '」';
   const latest = $('#latest'); latest.textContent = ''; latest.classList.add('streaming');
-  speechSynthesis.cancel();
+  stopSpeech();
   const wait = add('sys', '考え中…'), t0 = performance.now();
   let bubble = null, full = '', pending = '';
   const flush = force => { // 句点・改行まで溜まったら、その文を読み上げに回す
@@ -351,7 +376,7 @@ $('#reset').onclick = async () => {
   try { if (RELAY) await relayAsk('reset', {}, () => {}); else await fetch('/api/reset', { method:'POST', body: JSON.stringify({ session }) }); }
   catch (e) { note(e.asleep ? MSG_ASLEEP : 'Macにつながりません'); return; }
   log.innerHTML = ''; turns = 0; $('#turns').textContent = '00'; $('#heard').textContent = ''; note('新しい会話を始めます'); };
-$('#voice').onclick = () => { voiceOn = !voiceOn; localStorage.setItem('jarvis_voice', voiceOn ? 'on' : 'off'); if (!voiceOn) speechSynthesis.cancel(); renderVoice(); };
+$('#voice').onclick = () => { voiceOn = !voiceOn; localStorage.setItem('jarvis_voice', voiceOn ? 'on' : 'off'); if (!voiceOn) stopSpeech(); renderVoice(); };
 
 // ---- 耳（マイク共通） ----
 let ctx, stream, analyser, freq;
@@ -398,13 +423,23 @@ async function transcribe(frames) {
 }
 
 // ---- 押して話す（通常モード） ----
-let ptt = { on:false, node:null, src:null, chunks:[] }, transcribing = false;
+// 押している間だけ聞く（長押し）か、一回タップで聞き始めて黙ったら送る（タップ）。タップ中にもう一度押すとすぐ送る。
+let ptt = { on:false, node:null, src:null, chunks:[], latched:false, downAt:0, heard:false, silent:0, t:0, floor:0.004 }, transcribing = false;
 async function startRec() {
   if (busy || ptt.on || consult.on) return;
-  unlockAudio(); speechSynthesis.cancel();
+  unlockAudio(); stopSpeech();
   try { await ensureMic(); } catch (e) { note('マイクが使えません：' + e.message); return; }
   ptt.src = ctx.createMediaStreamSource(stream); ptt.node = ctx.createScriptProcessor(2048, 1, 1); ptt.chunks = [];
-  ptt.node.onaudioprocess = e => { const d = new Float32Array(e.inputBuffer.getChannelData(0)); ptt.chunks.push(d); micLevel = rmsOf(d); };
+  Object.assign(ptt, { latched:false, heard:false, silent:0, t:0, floor:0.004 });
+  ptt.node.onaudioprocess = e => {
+    const d = new Float32Array(e.inputBuffer.getChannelData(0)), ms = d.length / ctx.sampleRate * 1000;
+    ptt.chunks.push(d); micLevel = rmsOf(d); ptt.t += ms;
+    if (!ptt.latched) return;
+    const on = micLevel > Math.max(0.01, ptt.floor * 3);
+    if (!ptt.heard) { if (on) ptt.heard = true; else ptt.floor = ptt.floor * 0.97 + micLevel * 0.03; }
+    else ptt.silent = on ? 0 : ptt.silent + ms;
+    if ((ptt.heard && ptt.silent > 1600) || (!ptt.heard && ptt.t > 15000) || ptt.t > 60000) stopRec();
+  };
   ptt.src.connect(ptt.node); ptt.node.connect(ctx.destination);
   ptt.on = true; renderStatus();
 }
@@ -436,13 +471,14 @@ function renderStatus() {
     thinking:'考え中', speaking:'話しています' }[vs] || '';
   $('#mode').textContent = consult.on ? (consult.hold ? 'HOLD' : 'CONSULT') : 'STANDARD';
   hint.textContent = !consult.on
-    ? 'リングを押している間だけ聞き取ります ・ MACはスペースキー長押しでも可'
+    ? (ptt.on && ptt.latched ? '聞いています ・ 黙ると送ります（すぐ送るならもう一度タップ）'
+      : 'リングをタップして話す（黙ると送ります）・ 長押しでも可 ・ MACはスペースキーでも可')
     : consult.hold ? '話し終えたら「以上」 ・ またはリングをタップ'
     : vs === 'speaking' ? 'タップで止めて、こちらの番に'
     : '黙ると返事 ・ 「ちょっと待って」で考える時間 ・ 「相談終わり」で終了';
 }
 async function startConsult() {
-  unlockAudio(); speechSynthesis.cancel();
+  unlockAudio(); stopSpeech();
   try { await ensureMic(); } catch (e) { note('マイクが使えません：' + e.message); return; }
   consult.src = ctx.createMediaStreamSource(stream); consult.node = ctx.createScriptProcessor(2048, 1, 1);
   consult.node.onaudioprocess = onFrame;
@@ -514,7 +550,7 @@ async function dispatch(text) {
   setState('listen'); chime();
 }
 function tapInConsult() {
-  if (consult.state === 'speaking') { speechSynthesis.cancel(); return; } // 止めて、こちらの番に
+  if (consult.state === 'speaking') { stopSpeech(); return; } // 止めて、こちらの番に
   if (consult.inSpeech) { // 話し終わりをすぐ確定
     if (consult.hold) consult.forceSend = true;
     endSegment(); return;
@@ -531,7 +567,7 @@ function tapInConsult() {
 function visState() {
   if (consult.on && consult.hold && consult.state !== 'thinking' && consult.state !== 'speaking') return consult.inSpeech ? 'speech' : 'hold';
   if (ptt.on || (consult.on && consult.state === 'speech')) return 'speech';
-  if ('speechSynthesis' in window && speechSynthesis.speaking && voiceOn) return 'speaking';
+  if (voiceOn && isSpeaking()) return 'speaking';
   if (busy || transcribing || consult.state === 'thinking') return 'thinking';
   if (consult.on) return 'listen';
   return 'idle';
@@ -729,14 +765,25 @@ function draw(ts) {
 requestAnimationFrame(draw);
 
 // ---- ボタンとキー ----
-mic.addEventListener('pointerdown', e => { e.preventDefault(); if (consult.on) { tapInConsult(); return; } mic.setPointerCapture(e.pointerId); startRec(); });
-mic.addEventListener('pointerup', () => { if (!consult.on) stopRec(); });
-mic.addEventListener('pointercancel', () => { if (!consult.on) stopRec(); });
+function pressDown() {
+  if (consult.on) { tapInConsult(); return; }
+  if (ptt.on && ptt.latched) { stopRec(); return; } // タップ中にもう一度押したらすぐ送る
+  if (isSpeaking()) stopSpeech();
+  ptt.downAt = performance.now(); startRec();
+}
+function pressUp() {
+  if (consult.on || !ptt.on || ptt.latched) return;
+  if (performance.now() - ptt.downAt < 400) { ptt.latched = true; renderStatus(); return; } // 短く押した＝タップ
+  stopRec();
+}
+mic.addEventListener('pointerdown', e => { e.preventDefault(); try { mic.setPointerCapture(e.pointerId); } catch (_) {} pressDown(); });
+mic.addEventListener('pointerup', pressUp);
+mic.addEventListener('pointercancel', pressUp);
 document.addEventListener('keydown', e => {
   if (e.code !== 'Space' || e.repeat || document.activeElement === $('#t')) return;
-  e.preventDefault(); if (consult.on) tapInConsult(); else startRec();
+  e.preventDefault(); pressDown();
 });
-document.addEventListener('keyup', e => { if (e.code === 'Space' && document.activeElement !== $('#t') && !consult.on) { e.preventDefault(); stopRec(); } });
+document.addEventListener('keyup', e => { if (e.code === 'Space' && document.activeElement !== $('#t')) { e.preventDefault(); pressUp(); } });
 
 renderStatus();
 $('#status').textContent = 'ONLINE';
