@@ -182,6 +182,7 @@
     <div><div class="row">MODE <b id="mode">STANDARD</b></div></div>
     <div><div class="row">TURNS <b id="turns">00</b></div></div>
     <div><div class="row">LATENCY <b id="lat">—</b></div></div>
+    <div><div class="row">TASKS <b id="tasks">—</b></div></div>
     <div><div class="row">CREDIT <b id="cost">—</b></div><div class="meter cost"><i id="costbar"></i></div></div>
   </aside>
 </main>
@@ -784,6 +785,19 @@ document.addEventListener('keydown', e => {
   e.preventDefault(); pressDown();
 });
 document.addEventListener('keyup', e => { if (e.code === 'Space' && document.activeElement !== $('#t')) { e.preventDefault(); pressUp(); } });
+
+// 裏で頼んだ Claude Code の作業：Macの画面では、終わったら読み上げる
+if (MAC_LOCAL) setInterval(async () => {
+  try {
+    const d = await (await fetch('/api/tasks')).json();
+    $('#tasks').textContent = d.running ? `${d.running} RUNNING` : 'IDLE';
+    for (const f of d.finished) {
+      const msg = (f.status === 'done' ? '作業が終わりました。' : '作業が止まりました。') + f.result;
+      add('ai', msg); $('#latest').textContent = msg;
+      if (!busy && !ptt.on && !(consult.on && consult.state === 'speech')) speak(msg);
+    }
+  } catch (e) {}
+}, 8000);
 
 renderStatus();
 $('#status').textContent = 'ONLINE';
