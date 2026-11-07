@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JARVIS">
+<meta name="theme-color" content="#03070b">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@300;400;500&family=Noto+Sans+JP:wght@300;400;500&display=swap" rel="stylesheet">
+<title>JARVIS</title>
+<style>
+  :root {
+    --bg:#03070b; --ink:#dff3ff; --sub:#7f9db0; --dim:#4a6577;
+    --c:76,194,255;            /* 今の状態の色（JSが書き換える） */
+    --accent:rgb(var(--c)); --line:rgba(var(--c),.22);
+    --head:"Rajdhani","SF Pro Display",sans-serif;
+    --mono:"JetBrains Mono","SF Mono",ui-monospace,Menlo,monospace;
+    --jp:"Noto Sans JP",-apple-system,"Hiragino Sans",sans-serif;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink); font-family:var(--jp); }
+  body {
+    display:flex; flex-direction:column; padding:calc(env(safe-area-inset-top) + 6px) 18px calc(env(safe-area-inset-bottom) + 4px);
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 40%, rgba(var(--c),.10), transparent 70%),
+      radial-gradient(ellipse at 50% 120%, rgba(0,0,0,.9), transparent 60%),
+      linear-gradient(rgba(120,200,255,.035) 1px, transparent 1px) 0 0/28px 28px,
+      linear-gradient(90deg, rgba(120,200,255,.035) 1px, transparent 1px) 0 0/28px 28px,
+      var(--bg);
+    transition:background-color .6s;
+  }
+  body::after { /* 周辺減光 */
+    content:""; position:fixed; inset:0; pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%);
+  }
+  /* 画面の四隅のブラケット */
+  .corner { position:fixed; width:22px; height:22px; border:1px solid rgba(var(--c),.55); pointer-events:none; z-index:1; transition:border-color .6s; }
+  .tl { top:calc(env(safe-area-inset-top) + 6px); left:6px; border-right:0; border-bottom:0; }
+  .tr { top:calc(env(safe-area-inset-top) + 6px); right:6px; border-left:0; border-bottom:0; }
+  .bl { bottom:calc(env(safe-area-inset-bottom) + 6px); left:6px; border-right:0; border-top:0; }
+  .br { bottom:calc(env(safe-area-inset-bottom) + 6px); right:6px; border-left:0; border-top:0; }
+
+  /* 上の帯 */
+  header.top { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding:10px 6px 10px;
+    border-bottom:1px solid rgba(var(--c),.16); position:relative; }
+  header.top::after { /* 目盛り付きの細線 */
+    content:""; position:absolute; left:0; right:0; bottom:-4px; height:4px;
+    background:repeating-linear-gradient(90deg, rgba(var(--c),.35) 0 1px, transparent 1px 12px); opacity:.5; }
+  .brand { font-family:var(--head); font-weight:700; font-size:20px; letter-spacing:.38em; color:var(--accent);
+    text-shadow:0 0 14px rgba(var(--c),.55); line-height:1; transition:color .6s; }
+  .brand small { display:block; font-family:var(--mono); font-weight:400; font-size:9px; letter-spacing:.22em; color:var(--dim); margin-top:6px; text-shadow:none; }
+  .clock { text-align:right; font-family:var(--mono); line-height:1; }
+  .clock b { font-weight:300; font-size:22px; letter-spacing:.06em; color:var(--ink); }
+  .clock span { display:block; font-size:9px; letter-spacing:.2em; color:var(--dim); margin-top:6px; }
+
+  .chips { display:flex; gap:6px; justify-content:center; padding:14px 0 0; flex-wrap:wrap; }
+  .chip { font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; color:var(--sub); background:rgba(8,20,30,.55);
+    border:1px solid rgba(var(--c),.2); padding:6px 11px; cursor:pointer; transition:all .25s;
+    clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px); }
+  .chip:hover { color:var(--ink); border-color:rgba(var(--c),.5); }
+  .chip.on { color:var(--accent); border-color:var(--accent); background:rgba(var(--c),.10); box-shadow:inset 0 0 14px rgba(var(--c),.22); }
+
+  /* 中央：左右の計器＋リング */
+  main { flex:1; min-height:0; display:grid; grid-template-columns:1fr minmax(0,2.4fr) 1fr; grid-template-rows:minmax(0,1fr); align-items:center; gap:12px; }
+  .panel { font-family:var(--mono); font-size:10px; letter-spacing:.14em; color:var(--sub); display:flex; flex-direction:column; gap:14px; max-width:220px; }
+  .panel.left { justify-self:end; text-align:left; }
+  .panel.right { justify-self:start; }
+  .panel h3 { margin:0 0 2px; font-family:var(--head); font-weight:600; font-size:11px; letter-spacing:.34em; color:var(--accent);
+    padding-bottom:6px; border-bottom:1px solid rgba(var(--c),.25); transition:color .6s; }
+  .row { display:flex; justify-content:space-between; gap:18px; align-items:baseline; white-space:nowrap; }
+  .row b { font-weight:400; color:var(--ink); letter-spacing:.06em; }
+  .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:#5cf2a6; box-shadow:0 0 8px #5cf2a6; margin-right:6px; vertical-align:1px; }
+  .dot.off { background:#ff6b7d; box-shadow:0 0 8px #ff6b7d; }
+  .meter { height:4px; background:rgba(var(--c),.12); position:relative; overflow:hidden; margin-top:6px; }
+  .meter i { position:absolute; inset:0 auto 0 0; width:0; background:var(--accent); box-shadow:0 0 10px var(--accent); transition:width .12s linear; }
+  .meter.cost i { transition:width .6s ease; }
+  .bars { display:flex; gap:2px; height:18px; align-items:flex-end; margin-top:6px; }
+  .bars i { flex:1; background:rgba(var(--c),.6); height:8%; transition:height .08s linear; }
+
+  #stage { display:flex; align-items:center; justify-content:center; min-height:0; height:100%; }
+  #mic { position:relative; padding:0; border:0; background:none; border-radius:50%; touch-action:none; user-select:none; -webkit-user-select:none; cursor:pointer; outline:none; }
+  #ring { display:block; }
+
+  /* 字幕 */
+  #caption { display:flex; flex-direction:column; align-items:center; gap:8px; padding:4px 8px 0; min-height:0; }
+  #status { font-family:var(--head); font-weight:600; font-size:13px; letter-spacing:.5em; color:var(--accent); text-indent:.5em;
+    text-shadow:0 0 12px rgba(var(--c),.6); transition:color .6s; }
+  #status::before, #status::after { content:"—"; opacity:.45; margin:0 .6em; letter-spacing:0; }
+  #heard { font-size:12.5px; font-weight:300; color:var(--sub); text-align:center; max-width:620px; min-height:18px;
+    overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  #latest { font-size:18px; font-weight:300; line-height:1.75; letter-spacing:.03em; text-align:center; max-width:620px; min-height:31px;
+    max-height:26vh; overflow-y:auto; text-shadow:0 0 22px rgba(var(--c),.22); scrollbar-width:none;
+    -webkit-mask-image:linear-gradient(transparent, #000 14px, #000); mask-image:linear-gradient(transparent, #000 14px, #000); padding-top:6px; }
+  #latest::-webkit-scrollbar { display:none; }
+  #latest.streaming::after { content:"▍"; color:var(--accent); animation:blink .9s steps(2) infinite; margin-left:2px; }
+  @keyframes blink { 50% { opacity:0; } }
+  #hint { font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; color:var(--dim); text-align:center; line-height:1.6; }
+
+  form { display:flex; gap:8px; width:100%; max-width:620px; margin:12px auto 10px; }
+  input { flex:1; min-width:0; background:rgba(6,16,24,.75); border:1px solid rgba(var(--c),.18); color:var(--ink); padding:11px 12px;
+    font-size:16px; font-family:var(--jp); font-weight:300; outline:none; transition:border-color .2s;
+    clip-path:polygon(8px 0,100% 0,100% 100%,0 100%,0 8px); }
+  input:focus { border-color:rgba(var(--c),.6); }
+  input::placeholder { color:var(--dim); }
+  form button { font-family:var(--mono); font-size:11px; letter-spacing:.2em; background:rgba(var(--c),.08); color:var(--accent);
+    border:1px solid rgba(var(--c),.6); padding:0 16px; cursor:pointer; clip-path:polygon(0 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%); }
+
+  /* 履歴（引き出し） */
+  #drawer { position:fixed; inset:0; background:rgba(2,6,10,.95); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    display:flex; flex-direction:column; padding:calc(env(safe-area-inset-top) + 6px) 18px env(safe-area-inset-bottom);
+    transform:translateY(102%); transition:transform .35s cubic-bezier(.2,.8,.2,1); z-index:5; }
+  #drawer.open { transform:none; }
+  #drawer header { display:flex; justify-content:space-between; align-items:center; padding:14px 0 10px; border-bottom:1px solid rgba(var(--c),.2); }
+  #log { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:16px 0; max-width:680px; width:100%; margin:0 auto; }
+  .msg { max-width:86%; padding:9px 13px; line-height:1.7; font-size:15px; font-weight:300; white-space:pre-wrap; word-break:break-word; border:1px solid rgba(var(--c),.18); }
+  .me { align-self:flex-end; background:rgba(40,90,130,.32); }
+  .ai { align-self:flex-start; background:rgba(8,22,34,.85); border-left:2px solid var(--accent); }
+  .sys { align-self:center; color:var(--dim); font-size:10px; border:0; font-family:var(--mono); letter-spacing:.12em; padding:0; }
+
+  /* スマホ用QR */
+  #qr { position:fixed; inset:0; z-index:6; background:rgba(2,6,10,.92); display:flex; align-items:center; justify-content:center; }
+  #qr[hidden] { display:none; }
+  .qrbox { text-align:center; display:flex; flex-direction:column; align-items:center; gap:14px; padding:24px; border:1px solid rgba(var(--c),.4); background:rgba(6,16,24,.9); max-width:340px; }
+  #qrcode { background:#fff; padding:12px; }
+  .qrbox p { font-size:12px; line-height:1.7; color:var(--sub); margin:0; }
+  /* 起動演出 */
+  .boot header.top, .boot .chips, .boot .panel, .boot #caption, .boot form { opacity:0; transform:translateY(6px); }
+  header.top, .chips, .panel, #caption, form { transition:opacity .7s ease, transform .7s ease; }
+  .panel.left { transition-delay:.25s; } .panel.right { transition-delay:.35s; } #caption { transition-delay:.45s; } form { transition-delay:.55s; }
+
+  /* スマホ幅：左の計器は隠し、右の計器を横一列の帯にする */
+  @media (max-width: 820px) {
+    main { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); gap:6px; }
+    .panel.left { display:none; }
+    .panel.right { order:-1; justify-self:stretch; max-width:none; flex-direction:row; gap:10px; padding-top:12px; }
+    .panel.right h3 { display:none; }
+    .panel.right > div { flex:1; min-width:0; }
+    .panel.right .row { flex-direction:column; gap:3px; align-items:flex-start; font-size:8.5px; }
+    .panel.right .row b { font-size:11px; }
+    .panel.right .bars { display:none; }
+    .brand { font-size:17px; } .clock b { font-size:18px; }
+    .brand small, .clock span { letter-spacing:.12em; white-space:nowrap; font-size:8.5px; }
+    #latest { font-size:16.5px; max-height:24vh; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { transition-duration:.01s !important; animation:none !important; } }
+</style>
+</head>
+<body class="boot">
+<span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+<header class="top">
+  <div class="brand">J.A.R.V.I.S.<small>PERSONAL INTELLIGENCE // KAICHI</small></div>
+  <div class="clock"><b id="clock">--:--</b><span id="date"></span></div>
+</header>
+<div class="chips">
+  <button class="chip" id="consult">相談モード</button>
+  <button class="chip" id="voice">声 ON</button>
+  <button class="chip" id="history">履歴</button>
+  <button class="chip" id="reset">新しい会話</button>
+  <button class="chip" id="phone" hidden>スマホで開く</button>
+</div>
+<main>
+  <aside class="panel left">
+    <div>
+      <h3>SYSTEM</h3>
+      <div class="row">LINK <b><span class="dot" id="linkdot"></span><span id="link">MAC</span></b></div>
+      <div class="row">EARS <b>WHISPER v3</b></div>
+      <div class="row">CORE <b>OPUS 5.5</b></div>
+      <div class="row">VOICE <b id="voicename">KYOKO</b></div>
+    </div>
+    <div>
+      <h3>AUDIO IN</h3>
+      <div class="bars" id="bars"></div>
+    </div>
+  </aside>
+  <section id="stage"><button id="mic" aria-label="話す"><canvas id="ring"></canvas></button></section>
+  <aside class="panel right">
+    <h3>SESSION</h3>
+    <div><div class="row">MODE <b id="mode">STANDARD</b></div></div>
+    <div><div class="row">TURNS <b id="turns">00</b></div></div>
+    <div><div class="row">LATENCY <b id="lat">—</b></div></div>
+    <div><div class="row">CREDIT <b id="cost">—</b></div><div class="meter cost"><i id="costbar"></i></div></div>
+  </aside>
+</main>
+<div id="caption">
+  <div id="status">BOOT</div>
+  <div id="heard"></div>
+  <div id="latest"></div>
+  <div id="hint"></div>
+</div>
+<form id="f"><input id="t" placeholder="文字で話しかける" autocomplete="off"><button>SEND</button></form>
+<div id="qr" hidden><div class="qrbox"><div class="brand" style="font-size:13px">PHONE LINK</div><div id="qrcode"></div>
+  <p>iPhoneのカメラで読み取って開き、共有 →「ホーム画面に追加」。<br>このQRには合言葉が入っています。人に見せないでください。</p>
+  <button class="chip" id="qrclose">閉じる</button></div></div>
+<div id="drawer">
+  <header><div class="brand" style="font-size:15px">LOG</div><button class="chip" id="close">閉じる</button></header>
+  <div id="log"></div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const log = $('#log'), mic = $('#mic'), hint = $('#hint');
+let session = localStorage.getItem('jarvis_session');
+if (!session) { session = crypto.randomUUID ? crypto.randomUUID() : String(Date.now()); localStorage.setItem('jarvis_session', session); }
+let voiceOn = localStorage.getItem('jarvis_voice') !== 'off';
+let busy = false, micLevel = 0, turns = 0;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function add(cls, text) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; }
+function note(text) { add('sys', text); $('#latest').textContent = text; } // 画面中央にも出すお知らせ
+function setCost(usd) {
+  if (usd == null) return;
+  $('#cost').textContent = `$${usd.toFixed(2)} / 100`;
+  $('#costbar').style.width = Math.min(100, usd) + '%';
+}
+function renderVoice() { $('#voice').textContent = voiceOn ? '声 ON' : '声 OFF'; $('#voice').classList.toggle('on', voiceOn); }
+renderVoice();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const WD = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+const tick = () => { const n = new Date(); $('#clock').textContent = n.toTimeString().slice(0, 5);
+  $('#date').textContent = `${n.getFullYear()}.${String(n.getMonth() + 1).padStart(2, '0')}.${String(n.getDate()).padStart(2, '0')} ${WD[n.getDay()]}`; };
+tick(); setInterval(tick, 1000);
+function setLink(ok) { $('#linkdot').classList.toggle('off', !ok); $('#link').textContent = ok ? 'MAC' : 'OFFLINE'; }
+$('#history').onclick = () => { $('#drawer').classList.add('open'); log.scrollTop = log.scrollHeight; };
+$('#close').onclick = () => $('#drawer').classList.remove('open');
+// Macの画面だけ：スマホで開くためのQR（合言葉入りのURL）
+if (['localhost', '127.0.0.1'].includes(location.hostname)) $('#phone').hidden = false;
+$('#phone').onclick = async () => {
+  const { url } = await (await fetch('/api/phone_url')).json();
+  if (!window.QRCode) await new Promise((ok, ng) => { const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload = ok; s.onerror = ng; document.head.appendChild(s); });
+  $('#qrcode').innerHTML = ''; new QRCode($('#qrcode'), { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+  $('#qr').hidden = false;
+};
+$('#qrclose').onclick = () => { $('#qr').hidden = true; $('#qrcode').innerHTML = ''; };
+
+// ---- 口（端末の読み上げ。一文ずつ順番待ち） ----
+let jaVoice = null;
+function pickVoice() { const vs = speechSynthesis.getVoices(); jaVoice = vs.find(v => v.name.includes('Kyoko')) || vs.find(v => v.lang === 'ja-JP') || null;
+  $('#voicename').textContent = jaVoice ? jaVoice.name.split(' ')[0].toUpperCase().slice(0, 10) : 'SYSTEM'; }
+if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function speak(text) {
+  if (!voiceOn || !('speechSynthesis' in window) || !text.trim()) return;
+  const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.15; if (jaVoice) u.voice = jaVoice;
+  speechSynthesis.speak(u);
+}
+let unlocked = false;
+function unlockAudio() { // iPhoneは最初のタップで読み上げを解錠しておく
+  if (unlocked || !('speechSynthesis' in window)) return; unlocked = true;
+  const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u);
+}
+async function waitSpeechEnd() {
+  if (!('speechSynthesis' in window)) return;
+  await sleep(150);
+  while (speechSynthesis.speaking || speechSynthesis.pending) await sleep(150);
+  await sleep(350); // 読み上げの残響を拾わないよう少し待つ
+}
+function chime() { // 相談モードで「どうぞ」の合図。小さく短く
+  if (!ctx) return;
+  const o = ctx.createOscillator(), gn = ctx.createGain(), t0 = ctx.currentTime;
+  o.type = 'sine'; o.frequency.setValueAtTime(1320, t0); o.frequency.exponentialRampToValueAtTime(1760, t0 + 0.08);
+  gn.gain.setValueAtTime(0.0001, t0); gn.gain.exponentialRampToValueAtTime(0.05, t0 + 0.01); gn.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+  o.connect(gn); gn.connect(ctx.destination); o.start(); o.stop(t0 + 0.18);
+}
+
+// ---- Macとのつなぎ方 ----
+// Macで開いた時（localhost）は直接。スマホ（GitHub Pages）からは Supabase の中継を通す。
+// 中継の合言葉は URL の # のあとに付けて開く（一度開けば端末に覚える）。
+const RELAY = !['localhost', '127.0.0.1'].includes(location.hostname);
+const RELAY_URL = 'https://lgjguacnsditdemcnvqy.supabase.co/functions/v1/jarvis';
+const MSG_ASLEEP = 'Macが眠っています。Macを開いて電源につなぐと話せます。';
+let relayKey = '';
+if (RELAY) {
+  try { relayKey = location.hash.slice(1) || localStorage.getItem('jarvis_key') || '';
+    if (location.hash.length > 1) { localStorage.setItem('jarvis_key', relayKey); history.replaceState(null, '', location.pathname); } } catch (e) {}
+}
+async function relay(action, data) {
+  const r = await fetch(`${RELAY_URL}?action=${action}`, data
+    ? { method:'POST', headers:{ 'Content-Type':'application/json', 'x-jarvis-key':relayKey }, body: JSON.stringify(data) }
+    : { headers:{ 'x-jarvis-key':relayKey } });
+  if (r.status === 403) { const e = new Error('合言葉が違います'); throw e; }
+  return r.json();
+}
+async function relayAsk(kind, body, onData) { // 依頼を置いて、返事の断片を順に受け取る
+  const a = await relay('ask', { kind, session, mode: body.mode || '', body });
+  if (!a.mac) { const e = new Error('asleep'); e.asleep = true; throw e; }
+  let after = 0;
+  while (true) {
+    const q = await relay(`events&id=${a.id}&after=${after}`);
+    for (const ev of q.events) { after = ev.id; onData(ev.data); if (ev.data.done) return; }
+  }
+}
+async function streamChat(body, onData) {
+  if (RELAY) return relayAsk('chat', { text: body.text, mode: body.mode }, onData);
+  const r = await fetch('/api/chat_stream', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream:true });
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const line = buf.slice(0, i); buf = buf.slice(i + 2);
+      if (line.startsWith('data: ')) onData(JSON.parse(line.slice(6)));
+    }
+  }
+}
+async function blobToB64(blob) {
+  const bytes = new Uint8Array(await blob.arrayBuffer()); let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+
+// ---- 会話 ----
+async function send(text) {
+  text = text.trim(); if (!text || busy) return;
+  busy = true;
+  add('me', text); $('#heard').textContent = '「' + text + '」';
+  const latest = $('#latest'); latest.textContent = ''; latest.classList.add('streaming');
+  speechSynthesis.cancel();
+  const wait = add('sys', '考え中…'), t0 = performance.now();
+  let bubble = null, full = '', pending = '';
+  const flush = force => { // 句点・改行まで溜まったら、その文を読み上げに回す
+    const m = force ? [pending] : pending.match(/^[\s\S]*?[。！？!?\n]/);
+    if (!m || !m[0]) return false;
+    speak(m[0]); pending = pending.slice(m[0].length); return true;
+  };
+  try {
+    await streamChat({ session, text, mode: consult.on ? 'consult' : '' }, d => {
+      if (d.t != null) {
+        if (!bubble) { wait.remove(); bubble = add('ai', ''); $('#lat').textContent = ((performance.now() - t0) / 1000).toFixed(1) + 's'; }
+        full += d.t; pending += d.t; bubble.textContent = full.trim(); log.scrollTop = log.scrollHeight;
+        latest.textContent = full.trim(); latest.scrollTop = 1e6;
+        while (flush(false));
+      }
+      if (d.error) { wait.remove(); add('ai', d.error); latest.textContent = d.error; speak(d.error); }
+      if (d.done) setCost(d.month_usd);
+    });
+    setLink(true);
+    flush(true);
+    turns++; $('#turns').textContent = String(turns).padStart(2, '0');
+    if (!bubble && wait.isConnected) wait.textContent = '（返事が空でした）';
+  } catch (e) { wait.remove(); setLink(false); note(e.asleep ? MSG_ASLEEP : 'Macにつながりません（眠っているか、ネットが切れています）'); }
+  latest.classList.remove('streaming');
+  busy = false;
+}
+$('#f').addEventListener('submit', e => { e.preventDefault(); unlockAudio(); const t = $('#t'); const v = t.value; t.value = ''; t.blur();
+  if (consult.on) dispatch(v); else send(v); });
+$('#reset').onclick = async () => {
+  try { if (RELAY) await relayAsk('reset', {}, () => {}); else await fetch('/api/reset', { method:'POST', body: JSON.stringify({ session }) }); }
+  catch (e) { note(e.asleep ? MSG_ASLEEP : 'Macにつながりません'); return; }
+  log.innerHTML = ''; turns = 0; $('#turns').textContent = '00'; $('#heard').textContent = ''; note('新しい会話を始めます'); };
+$('#voice').onclick = () => { voiceOn = !voiceOn; localStorage.setItem('jarvis_voice', voiceOn ? 'on' : 'off'); if (!voiceOn) speechSynthesis.cancel(); renderVoice(); };
+
+// ---- 耳（マイク共通） ----
+let ctx, stream, analyser, freq;
+async function ensureMic() {
+  if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true } });
+  ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  if (!analyser) { // 画面のリングと計器を声に反応させるための分析器
+    analyser = ctx.createAnalyser(); analyser.fftSize = 256; analyser.smoothingTimeConstant = 0.7;
+    ctx.createMediaStreamSource(stream).connect(analyser); freq = new Uint8Array(analyser.frequencyBinCount);
+  }
+}
+function rmsOf(d) { let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i]; return Math.sqrt(s / d.length); }
+function toWav16k(data, rate) {
+  const ratio = rate / 16000, n = Math.floor(data.length / ratio), pcm = new Int16Array(n);
+  for (let i = 0; i < n; i++) { // 区間平均で間引く
+    const a = Math.floor(i * ratio), b = Math.min(data.length, Math.floor((i + 1) * ratio)); let s = 0;
+    for (let j = a; j < b; j++) s += data[j];
+    const v = Math.max(-1, Math.min(1, s / Math.max(1, b - a))); pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  const buf = new ArrayBuffer(44 + pcm.length * 2), dv = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + pcm.length * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, 16000, true);
+  dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, pcm.length * 2, true);
+  new Int16Array(buf, 44).set(pcm);
+  return new Blob([buf], { type: 'audio/wav' });
+}
+function joinFrames(frames) {
+  const len = frames.reduce((a, c) => a + c.length, 0), all = new Float32Array(len); let o = 0;
+  for (const c of frames) { all.set(c, o); o += c.length; } return all;
+}
+async function transcribe(frames) {
+  const all = joinFrames(frames);
+  if (all.length < ctx.sampleRate * 0.4) return '';
+  const wav = toWav16k(all, ctx.sampleRate);
+  if (RELAY) {
+    let heard = '';
+    await relayAsk('listen', { audio: await blobToB64(wav) }, d => { if (d.heard != null) heard = d.heard; });
+    return heard;
+  }
+  const r = await fetch('/api/listen', { method:'POST', headers:{'Content-Type':'audio/wav'}, body: wav });
+  return (await r.json()).text || '';
+}
+
+// ---- 押して話す（通常モード） ----
+let ptt = { on:false, node:null, src:null, chunks:[] }, transcribing = false;
+async function startRec() {
+  if (busy || ptt.on || consult.on) return;
+  unlockAudio(); speechSynthesis.cancel();
+  try { await ensureMic(); } catch (e) { note('マイクが使えません：' + e.message); return; }
+  ptt.src = ctx.createMediaStreamSource(stream); ptt.node = ctx.createScriptProcessor(2048, 1, 1); ptt.chunks = [];
+  ptt.node.onaudioprocess = e => { const d = new Float32Array(e.inputBuffer.getChannelData(0)); ptt.chunks.push(d); micLevel = rmsOf(d); };
+  ptt.src.connect(ptt.node); ptt.node.connect(ctx.destination);
+  ptt.on = true; renderStatus();
+}
+async function stopRec() {
+  if (!ptt.on) return;
+  ptt.on = false; micLevel = 0; ptt.src.disconnect(); ptt.node.disconnect();
+  transcribing = true; renderStatus();
+  try {
+    const text = await transcribe(ptt.chunks); transcribing = false;
+    if (text) send(text); else note('聞き取れませんでした');
+  } catch (e) { transcribing = false; setLink(false); note(e.asleep ? MSG_ASLEEP : 'Macにつながりません'); }
+  renderStatus();
+}
+
+// ---- 相談モード（手を使わずに話し続ける） ----
+// 話し始めるまでは何秒でも待つ。話し始めたら、SILENCE_MS 黙ったところで区切る。
+// 「ちょっと待って」→ 区切らず溜め続け、「以上」かタップで送る。「相談終わり」で終了。
+const SILENCE_MS = 2500;
+const consult = { on:false, state:'off', node:null, src:null, inSpeech:false, hits:0, frames:[], pre:[], silent:0,
+  floor:0.004, hold:false, holdText:[], queue:Promise.resolve(), forceSend:false };
+const RE_WAIT = /^(ちょっと|少し|ちょっ)?待って(ください|ね)?[。、!！]*$/;
+const RE_END = /^(相談)?(終わり|おわり|終了)(です|にしよう|して)?[。!！]*$/;
+const RE_DONE = /(以上|いじょう)(です)?[。!！]*$/;
+
+function setState(s) { consult.state = s; renderStatus(); }
+function renderStatus() {
+  const vs = visState();
+  $('#status').textContent = { idle:'STANDBY', listen:'どうぞ', speech:'聞いています', hold:'待っています',
+    thinking:'考え中', speaking:'話しています' }[vs] || '';
+  $('#mode').textContent = consult.on ? (consult.hold ? 'HOLD' : 'CONSULT') : 'STANDARD';
+  hint.textContent = !consult.on
+    ? 'リングを押している間だけ聞き取ります ・ MACはスペースキー長押しでも可'
+    : consult.hold ? '話し終えたら「以上」 ・ またはリングをタップ'
+    : vs === 'speaking' ? 'タップで止めて、こちらの番に'
+    : '黙ると返事 ・ 「ちょっと待って」で考える時間 ・ 「相談終わり」で終了';
+}
+async function startConsult() {
+  unlockAudio(); speechSynthesis.cancel();
+  try { await ensureMic(); } catch (e) { note('マイクが使えません：' + e.message); return; }
+  consult.src = ctx.createMediaStreamSource(stream); consult.node = ctx.createScriptProcessor(2048, 1, 1);
+  consult.node.onaudioprocess = onFrame;
+  consult.src.connect(consult.node); consult.node.connect(ctx.destination);
+  Object.assign(consult, { on:true, inSpeech:false, hits:0, frames:[], pre:[], silent:0, hold:false, holdText:[] });
+  $('#consult').classList.add('on'); $('#consult').textContent = '相談モード 終了';
+  note('相談モード：どうぞ。'); setState('listen'); chime();
+}
+function stopConsult() {
+  if (!consult.on) return;
+  consult.on = false; micLevel = 0; consult.src.disconnect(); consult.node.disconnect();
+  $('#consult').classList.remove('on'); $('#consult').textContent = '相談モード';
+  add('sys', '相談モードを終わりました'); setState('off');
+}
+$('#consult').onclick = () => consult.on ? stopConsult() : startConsult();
+
+function onFrame(e) {
+  if (!consult.on || !(consult.state === 'listen' || consult.state === 'speech' || consult.state === 'hold')) { micLevel = 0; return; }
+  const d = new Float32Array(e.inputBuffer.getChannelData(0));
+  const rms = rmsOf(d), ms = d.length / ctx.sampleRate * 1000;
+  micLevel = rms;
+  const on = rms > Math.max(0.01, consult.floor * 3);
+  if (!consult.inSpeech) {
+    consult.pre.push(d); if (consult.pre.length > 8) consult.pre.shift(); // 話し始めの直前も残す
+    if (!on) { consult.floor = consult.floor * 0.97 + rms * 0.03; consult.hits = 0; return; }
+    if (++consult.hits < 3) return;
+    consult.inSpeech = true; consult.frames = consult.pre.slice(); consult.silent = 0; setState('speech');
+    return;
+  }
+  consult.frames.push(d);
+  consult.silent = on ? 0 : consult.silent + ms;
+  if (consult.silent >= SILENCE_MS) endSegment();
+}
+function endSegment() {
+  const frames = consult.frames;
+  consult.inSpeech = false; consult.frames = []; consult.pre = []; consult.hits = 0;
+  if (consult.state === 'speech') setState(consult.hold ? 'hold' : 'listen');
+  // 聞き取りは順番に処理（その間も次の発話は録り続ける）
+  consult.queue = consult.queue.then(async () => {
+    let text = '';
+    try { text = await transcribe(frames); } catch (e) { setLink(false); note(e.asleep ? MSG_ASLEEP : 'Macにつながりません'); }
+    await handleText(text.trim());
+  });
+}
+async function handleText(text) {
+  if (!consult.on) return;
+  if (consult.hold) {
+    const done = RE_DONE.test(text) || consult.forceSend;
+    const t = text.replace(RE_DONE, '').trim();
+    if (t) { consult.holdText.push(t); add('sys', '（メモ中）' + t); $('#heard').textContent = '「' + consult.holdText.join(' ') + '」'; }
+    if (done) { consult.forceSend = false; const all = consult.holdText.join(' '); consult.hold = false; consult.holdText = [];
+      if (all) await dispatch(all); else setState('listen'); }
+    return;
+  }
+  if (!text) { if (!consult.inSpeech) setState('listen'); return; }
+  if (RE_END.test(text)) { stopConsult(); return; }
+  if (RE_WAIT.test(text)) { consult.hold = true; consult.holdText = []; setState('hold'); add('sys', '待っています'); $('#heard').textContent = ''; return; }
+  await dispatch(text.replace(RE_DONE, '').trim() || text);
+}
+async function dispatch(text) {
+  if (!text.trim()) return;
+  setState('thinking');
+  await send(text);
+  if (!consult.on) return;
+  setState('speaking');
+  await waitSpeechEnd();
+  if (!consult.on) return;
+  consult.inSpeech = false; consult.frames = []; consult.pre = []; consult.hits = 0;
+  setState('listen'); chime();
+}
+function tapInConsult() {
+  if (consult.state === 'speaking') { speechSynthesis.cancel(); return; } // 止めて、こちらの番に
+  if (consult.inSpeech) { // 話し終わりをすぐ確定
+    if (consult.hold) consult.forceSend = true;
+    endSegment(); return;
+  }
+  if (consult.hold) { // 溜めた分をすぐ送る
+    consult.queue = consult.queue.then(async () => {
+      const all = consult.holdText.join(' '); consult.hold = false; consult.holdText = [];
+      if (all) await dispatch(all); else setState('listen');
+    });
+  }
+}
+
+// ---- 見た目の状態（リングと配色はこれで決まる） ----
+function visState() {
+  if (consult.on && consult.hold && consult.state !== 'thinking' && consult.state !== 'speaking') return consult.inSpeech ? 'speech' : 'hold';
+  if (ptt.on || (consult.on && consult.state === 'speech')) return 'speech';
+  if ('speechSynthesis' in window && speechSynthesis.speaking && voiceOn) return 'speaking';
+  if (busy || transcribing || consult.state === 'thinking') return 'thinking';
+  if (consult.on) return 'listen';
+  return 'idle';
+}
+
+// ==== リング（アークリアクター風） ====
+const cv = $('#ring'), g = cv.getContext('2d');
+const COLORS = { idle:[76,194,255], listen:[96,214,255], speech:[150,238,255], thinking:[214,232,255], speaking:[70,170,255], hold:[245,184,76] };
+const SPIN = { idle:0.12, listen:0.2, speech:0.35, thinking:1.6, speaking:0.45, hold:0 };
+let W = 0, C = 0, R = 0, K = 1, cur = COLORS.idle.slice(), energy = 0, last = 0, lastVs = '';
+let rot = [0, 0, 0, 0], chase = 0, sweep = 0, spinNow = 0.12;
+const boot0 = performance.now(); let booted = false;
+const ripples = [];
+const motes = Array.from({ length: 46 }, () => ({ r: 0.55 + Math.random() * 0.8, a: Math.random() * 6.283, s: (Math.random() - 0.5) * 0.12, z: 0.6 + Math.random() * 1.6, p: Math.random() * 6.283 }));
+const spec = new Float32Array(48); // 声の波形（棒の高さ）
+
+function resize() {
+  const st = $('#stage');
+  const s = Math.max(200, Math.min(st.clientWidth, st.clientHeight - 4, 500));
+  cv.style.width = cv.style.height = s + 'px';
+  const d = window.devicePixelRatio || 1;
+  cv.width = cv.height = Math.round(s * d);
+  W = cv.width; C = W / 2; R = W * 0.33; K = W / 400;
+}
+new ResizeObserver(resize).observe($('#stage')); resize();
+
+// 計器の音声バー
+const barsEl = $('#bars'); for (let i = 0; i < 24; i++) barsEl.appendChild(document.createElement('i'));
+const barEls = [...barsEl.children];
+
+const ease = x => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+function draw(ts) {
+  const t = ts / 1000, dt = Math.min(0.05, last ? t - last : 0.016); last = t;
+  const bt = (ts - boot0) / 1000; // 起動からの秒数
+  const vs = visState();
+  if (vs !== lastVs) { // 状態が変わったら波紋を一つ出す
+    if (lastVs) ripples.push({ t0: t, c: COLORS[vs] });
+    lastVs = vs; renderStatus();
+  }
+  // 色はなめらかに次の状態へ
+  const tgt = COLORS[vs]; cur = cur.map((c, i) => c + (tgt[i] - c) * Math.min(1, dt * 5));
+  document.documentElement.style.setProperty('--c', cur.map(x => x | 0).join(','));
+
+  // 声の強さ（聞いている時は実際のマイク、話している時は擬似の波）
+  let live = 0;
+  if (analyser && (vs === 'speech' || vs === 'listen' || vs === 'hold')) {
+    analyser.getByteFrequencyData(freq);
+    for (let i = 0; i < spec.length; i++) { const v = freq[2 + Math.floor(i * 1.4)] / 255; spec[i] += (v - spec[i]) * 0.5; live += v; }
+    live /= spec.length;
+  } else {
+    for (let i = 0; i < spec.length; i++) {
+      const v = vs === 'speaking' ? Math.abs(Math.sin(t * 8.3 + i * 0.7) * Math.sin(t * 3.1 + i * 0.23)) * (0.55 + 0.45 * Math.sin(t * 13 + i))
+        : vs === 'thinking' ? 0.12 + 0.1 * Math.sin(t * 6 + i * 0.5) : 0.04 + 0.03 * Math.sin(t * 1.5 + i * 0.4);
+      spec[i] += (Math.max(0, v) - spec[i]) * 0.25;
+    }
+  }
+  barEls.forEach((b, i) => b.style.height = (8 + spec[i * 2] * 92) + '%');
+
+  const want = vs === 'speech' ? Math.min(1, 0.3 + live * 2.2 + micLevel * 6)
+    : vs === 'speaking' ? 0.5 + 0.25 * Math.abs(Math.sin(t * 7.3) * Math.sin(t * 2.9))
+    : vs === 'thinking' ? 0.45 : vs === 'hold' ? 0.14 : vs === 'listen' ? 0.24 + 0.05 * Math.sin(t * 2.2)
+    : 0.14 + 0.07 * Math.sin(t * 1.3);
+  energy += (want - energy) * Math.min(1, dt * 9);
+  spinNow += ((reduceMotion ? 0.3 : 1) * SPIN[vs] - spinNow) * Math.min(1, dt * 2.5);
+  rot[0] += spinNow * dt; rot[1] -= spinNow * 0.62 * dt; rot[2] += spinNow * 0.27 * dt; rot[3] -= spinNow * 1.4 * dt;
+  chase += (vs === 'thinking' ? 7 : 0.8) * dt; sweep += (vs === 'hold' ? 0 : 1.1) * dt;
+
+  const col = a => `rgba(${cur[0] | 0},${cur[1] | 0},${cur[2] | 0},${a})`;
+  const TAU = Math.PI * 2;
+  const reveal = d => ease((bt - d) / 0.9); // 起動時に外側へ順に描き出す
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, W);
+  g.lineCap = 'butt';
+
+  // --- 芯の光（加算合成で発光させる）
+  g.globalCompositeOperation = 'lighter';
+  const rv0 = reveal(0);
+  const core = g.createRadialGradient(C, C, 0, C, C, R * (0.62 + energy * 0.5) * rv0 + 1);
+  core.addColorStop(0, `rgba(255,255,255,${0.9 * rv0})`);
+  core.addColorStop(0.12, col(0.75 * rv0));
+  core.addColorStop(0.38, col((0.22 + energy * 0.25) * rv0));
+  core.addColorStop(1, col(0));
+  g.fillStyle = core; g.beginPath(); g.arc(C, C, R * 1.25, 0, TAU); g.fill();
+
+  // --- 内側の二重輪
+  g.shadowColor = col(1); g.shadowBlur = 16 * K;
+  g.strokeStyle = col(0.95 * rv0); g.lineWidth = 2.4 * K;
+  g.beginPath(); g.arc(C, C, R * 0.27 * (1 + energy * 0.14), 0, TAU * rv0); g.stroke();
+  g.shadowBlur = 0;
+  g.strokeStyle = col(0.35 * rv0); g.lineWidth = 1 * K;
+  g.beginPath(); g.arc(C, C, R * 0.33, 0, TAU); g.stroke();
+
+  // --- 声の波（放射状の棒・左右対称）
+  const rv1 = reveal(0.15), nb = spec.length * 2, rB = R * 0.38;
+  g.lineWidth = 2 * K; g.lineCap = 'round';
+  for (let i = 0; i < nb; i++) {
+    const v = spec[i < spec.length ? i : nb - 1 - i];
+    const a = (i / nb) * TAU - Math.PI / 2;
+    const len = R * (0.025 + v * 0.26) * rv1;
+    g.strokeStyle = col((0.25 + v * 0.75) * rv1);
+    g.beginPath(); g.moveTo(C + Math.cos(a) * rB, C + Math.sin(a) * rB);
+    g.lineTo(C + Math.cos(a) * (rB + len), C + Math.sin(a) * (rB + len)); g.stroke();
+  }
+  g.lineCap = 'butt';
+
+  // --- レーダーの走査（待機・聞き取り中）
+  if (g.createConicGradient && vs !== 'thinking') {
+    const sw = g.createConicGradient(sweep, C, C);
+    sw.addColorStop(0, col(0)); sw.addColorStop(0.86, col(0)); sw.addColorStop(0.995, col(0.16 * reveal(0.3))); sw.addColorStop(1, col(0));
+    g.fillStyle = sw; g.beginPath(); g.arc(C, C, R * 0.9, 0, TAU); g.arc(C, C, R * 0.66, 0, TAU, true); g.fill();
+  }
+
+  // --- 区切られた太い輪（考え中は光が追いかける）
+  const rv2 = reveal(0.3), segs = 12, rM = R * 0.74;
+  g.lineWidth = 8 * K;
+  for (let i = 0; i < segs; i++) {
+    const a0 = rot[0] + (i / segs) * TAU, span = (TAU / segs) * 0.66 * rv2;
+    const lit = vs === 'thinking' ? Math.max(0, Math.cos(chase - (i / segs) * TAU)) ** 3 : (i % 4 === 0 ? 0.6 : 0.15);
+    g.strokeStyle = col(0.22 + lit * 0.75);
+    if (lit > 0.5) { g.shadowColor = col(1); g.shadowBlur = 12 * K; }
+    g.beginPath(); g.arc(C, C, rM, a0, a0 + span); g.stroke();
+    g.shadowBlur = 0;
+  }
+  // 太い輪の内外の細線
+  g.lineWidth = 0.8 * K; g.strokeStyle = col(0.4 * rv2);
+  g.beginPath(); g.arc(C, C, rM - 7 * K, 0, TAU * rv2); g.stroke();
+  g.beginPath(); g.arc(C, C, rM + 7 * K, 0, TAU * rv2); g.stroke();
+
+  // --- 点線の輪（逆回り）
+  const rv3 = reveal(0.45);
+  g.save(); g.translate(C, C); g.rotate(rot[1]);
+  g.setLineDash([2 * K, 6 * K]); g.lineWidth = 2 * K; g.strokeStyle = col(0.55 * rv3);
+  g.beginPath(); g.arc(0, 0, R * 0.9, 0, TAU * rv3); g.stroke();
+  g.setLineDash([]);
+  g.restore();
+
+  // --- 目盛りと方位の数字
+  const rv4 = reveal(0.6), rT = R * 1.0, ticks = 180;
+  g.save(); g.translate(C, C); g.rotate(rot[2]);
+  for (let i = 0; i < ticks * rv4; i++) {
+    const a = (i / ticks) * TAU, major = i % 15 === 0, mid = i % 5 === 0;
+    const len = (major ? 11 : mid ? 6 : 3) * K;
+    g.strokeStyle = col(major ? 0.8 : mid ? 0.45 : 0.22); g.lineWidth = (major ? 1.6 : 1) * K;
+    g.beginPath(); g.moveTo(Math.cos(a) * rT, Math.sin(a) * rT); g.lineTo(Math.cos(a) * (rT + len), Math.sin(a) * (rT + len)); g.stroke();
+  }
+  g.fillStyle = col(0.55 * rv4); g.font = `${8.5 * K}px "JetBrains Mono", monospace`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let d = 0; d < 360; d += 30) {
+    const a = (d / 360) * TAU - Math.PI / 2, rr = rT + 21 * K;
+    g.save(); g.translate(Math.cos(a) * rr, Math.sin(a) * rr); g.rotate(a + Math.PI / 2);
+    g.fillText(String(d).padStart(3, '0'), 0, 0); g.restore();
+  }
+  g.restore();
+
+  // --- 外の弧（速めの逆回り・先端に光点）
+  const rv5 = reveal(0.75), rA = R * 1.24;
+  g.lineWidth = 2.2 * K;
+  for (let i = 0; i < 3; i++) {
+    const a0 = rot[3] + i * (TAU / 3), span = (0.5 + 0.25 * Math.sin(t * 0.7 + i)) * rv5;
+    g.strokeStyle = col(0.7 * rv5);
+    g.beginPath(); g.arc(C, C, rA, a0, a0 + span); g.stroke();
+    g.fillStyle = col(1);
+    g.shadowColor = col(1); g.shadowBlur = 10 * K;
+    g.beginPath(); g.arc(C + Math.cos(a0 + span) * rA, C + Math.sin(a0 + span) * rA, 2.8 * K * rv5, 0, TAU); g.fill();
+    g.shadowBlur = 0;
+  }
+  // 一番外の薄い輪と十字の照準
+  g.strokeStyle = col(0.14 * rv5); g.lineWidth = 1 * K;
+  g.beginPath(); g.arc(C, C, R * 1.36, 0, TAU); g.stroke();
+  g.strokeStyle = col(0.45 * rv5); g.lineWidth = 1.2 * K;
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2;
+    g.beginPath(); g.moveTo(C + Math.cos(a) * R * 1.31, C + Math.sin(a) * R * 1.31); g.lineTo(C + Math.cos(a) * R * 1.43, C + Math.sin(a) * R * 1.43); g.stroke();
+  }
+
+  // --- 漂う光の粒
+  for (const m of motes) {
+    m.a += m.s * dt * (vs === 'thinking' ? 4 : 1);
+    const rr = R * m.r, x = C + Math.cos(m.a) * rr, y = C + Math.sin(m.a) * rr;
+    const tw = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.3 + m.p));
+    g.fillStyle = col(0.5 * tw * reveal(0.9)); g.beginPath(); g.arc(x, y, m.z * K * 0.9, 0, TAU); g.fill();
+  }
+
+  // --- 状態が変わった時の波紋
+  for (let i = ripples.length - 1; i >= 0; i--) {
+    const age = (t - ripples[i].t0) / 0.9;
+    if (age >= 1) { ripples.splice(i, 1); continue; }
+    const c = ripples[i].c;
+    g.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${0.55 * (1 - age)})`; g.lineWidth = (3 - age * 2.5) * K;
+    g.beginPath(); g.arc(C, C, R * (0.3 + ease(age) * 1.15), 0, TAU); g.stroke();
+  }
+  g.globalCompositeOperation = 'source-over';
+
+  if (!booted && bt > 1.1) { booted = true; document.body.classList.remove('boot'); }
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+// ---- ボタンとキー ----
+mic.addEventListener('pointerdown', e => { e.preventDefault(); if (consult.on) { tapInConsult(); return; } mic.setPointerCapture(e.pointerId); startRec(); });
+mic.addEventListener('pointerup', () => { if (!consult.on) stopRec(); });
+mic.addEventListener('pointercancel', () => { if (!consult.on) stopRec(); });
+document.addEventListener('keydown', e => {
+  if (e.code !== 'Space' || e.repeat || document.activeElement === $('#t')) return;
+  e.preventDefault(); if (consult.on) tapInConsult(); else startRec();
+});
+document.addEventListener('keyup', e => { if (e.code === 'Space' && document.activeElement !== $('#t') && !consult.on) { e.preventDefault(); stopRec(); } });
+
+renderStatus();
+$('#status').textContent = 'ONLINE';
+if (RELAY) {
+  if (!relayKey) { setLink(false); note('合言葉付きのURLで開いてください'); }
+  else relay('status').then(d => { setLink(!!d.mac); note(d.mac ? '迦一さん、どうぞ。' : MSG_ASLEEP); })
+    .catch(e => { setLink(false); note(e.message === '合言葉が違います' ? e.message : 'ネットにつながりません'); });
+} else {
+  fetch('/api/status').then(r => r.json()).then(d => {
+    setLink(true); setCost(d.month_usd);
+    note(d.key ? '迦一さん、どうぞ。' : 'APIキーが未設定です（~/.config/jarvis/env）');
+  }).catch(() => { setLink(false); note('Macにつながりません'); });
+}
+</script>
+</body>
+</html>
