@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f4ef">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="食事管理">
+<title>食事管理</title>
+<style>
+  /* 画面は /api/meals/ の JSON だけに依存する。別アプリにするときは API を差し替えるだけでよい */
+  :root {
+    --bg:#f6f4ef; --card:#fff; --ink:#22211d; --sub:#6e6a60; --line:#e4e0d6;
+    --accent:#2f7d5b; --accent-soft:#e3f1ea; --warn:#b5651d; --warn-soft:#fbeedd; --bad:#b33a3a;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#16171a; --card:#1f2125; --ink:#ecebe6; --sub:#9a978d; --line:#30333a;
+      --accent:#5cc297; --accent-soft:#1d3329; --warn:#e3a35f; --warn-soft:#3a2b1b; --bad:#e07070;
+    }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; font-size:15px; line-height:1.5; }
+  body { padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 84px); max-width:720px; margin:0 auto; }
+  h1 { font-size:20px; margin:4px 0 14px; display:flex; justify-content:space-between; align-items:baseline; }
+  h1 small { font-size:12px; color:var(--sub); font-weight:400; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px; }
+  .muted { color:var(--sub); font-size:13px; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > .grow { flex:1; min-width:0; }
+  .between { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  button, .btn { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--ink);
+    border-radius:10px; padding:8px 12px; cursor:pointer; white-space:nowrap; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.small { padding:4px 9px; font-size:13px; }
+  button.ghost { border-color:transparent; background:transparent; color:var(--sub); }
+  button:disabled { opacity:.5; }
+  input, select, textarea { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line);
+    border-radius:10px; padding:8px 10px; width:100%; min-width:0; }
+  textarea { resize:vertical; min-height:44px; }
+  .big { font-size:30px; font-weight:700; letter-spacing:.01em; }
+  .meter { height:10px; border-radius:6px; background:var(--line); overflow:hidden; margin:8px 0 6px; }
+  .meter > i { display:block; height:100%; background:var(--accent); border-radius:6px; transition:width .4s; }
+  .meter.over > i { background:var(--bad); }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; text-align:center; }
+  .stats b { display:block; font-size:17px; }
+  .stats span { font-size:11px; color:var(--sub); }
+  .tag { display:inline-block; font-size:11px; padding:1px 7px; border-radius:20px; background:var(--accent-soft); color:var(--accent); margin-right:4px; }
+  .tag.warn { background:var(--warn-soft); color:var(--warn); }
+  ul.list { list-style:none; padding:0; margin:0; }
+  ul.list li { padding:9px 0; border-top:1px solid var(--line); }
+  ul.list li:first-child { border-top:0; }
+  .cat { font-size:12px; color:var(--sub); margin:12px 0 2px; font-weight:600; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; padding:3px 8px; font-size:12px; color:var(--sub); }
+  .seg button.on { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .draft { width:100%; border-collapse:collapse; font-size:13px; }
+  .draft td { padding:4px 3px; border-top:1px solid var(--line); vertical-align:middle; }
+  .draft input, .draft select { padding:5px 6px; font-size:13px; }
+  .idea { border-left:3px solid var(--accent); padding-left:10px; }
+  details summary { cursor:pointer; color:var(--sub); font-size:13px; }
+  nav { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line);
+    display:flex; justify-content:center; padding-bottom:env(safe-area-inset-bottom); z-index:5; }
+  nav button { flex:1; max-width:140px; border:0; border-radius:0; background:none; padding:10px 0 12px; font-size:12px; color:var(--sub); }
+  nav button b { display:block; font-size:19px; line-height:1.2; }
+  nav button.on { color:var(--accent); font-weight:600; }
+  .page { display:none; }
+  .page.on { display:block; }
+  #toast { position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 76px); transform:translateX(-50%);
+    background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:20px; font-size:14px; opacity:0;
+    transition:opacity .25s; pointer-events:none; max-width:calc(100% - 32px); z-index:9; }
+  #toast.on { opacity:.94; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid currentColor; border-right-color:transparent;
+    border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px; margin-right:6px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  .empty { color:var(--sub); font-size:13px; padding:6px 0; }
+</style>
+</head>
+<body>
+
+<h1>食事管理 <small><span id="today"></span>　<a href="./" style="color:var(--sub)">JARVIS</a></small></h1>
+
+<!-- ホーム -->
+<section class="page on" id="p-home">
+  <div class="card">
+    <div class="between"><h2>今月の食費</h2><button class="small ghost" onclick="editBudget()">予算を変更</button></div>
+    <div class="between" style="align-items:flex-end">
+      <div><span class="big" id="h-food">-</span> <span class="muted" id="h-budget"></span></div>
+      <div class="muted" style="text-align:right" id="h-left"></div>
+    </div>
+    <div class="meter" id="h-meter"><i style="width:0"></i></div>
+    <div class="muted" id="h-kinds"></div>
+  </div>
+  <div class="card">
+    <h2>直近7日の栄養（1日平均）</h2>
+    <div class="stats" id="h-week"></div>
+  </div>
+  <div class="card">
+    <h2>期限が近い食材</h2>
+    <ul class="list" id="h-soon"></ul>
+  </div>
+  <div class="card">
+    <h2>買い物リスト</h2>
+    <ul class="list" id="h-shop"></ul>
+    <div class="row" style="margin-top:8px">
+      <input class="grow" id="shop-in" placeholder="例：卵、牛乳" onkeydown="if(event.key==='Enter')addShop()">
+      <button onclick="addShop()">追加</button>
+    </div>
+  </div>
+</section>
+
+<!-- 記録 -->
+<section class="page" id="p-log">
+  <div class="card">
+    <h2>レシートを撮る</h2>
+    <p class="muted" style="margin:0 0 10px">金額と食材がまとめて入ります。保存前に直せます。</p>
+    <label class="btn" style="display:inline-block">📷 写真を選ぶ
+      <input type="file" accept="image/*" capture="environment" hidden onchange="readReceipt(this)">
+    </label>
+    <div id="draft"></div>
+  </div>
+  <div class="card">
+    <h2>一言で記録</h2>
+    <textarea id="rec-in" placeholder="例：豚キムチ2人分作った／昼にコンビニでおにぎり2個300円／もやし買った 40円"></textarea>
+    <div class="between" style="margin-top:8px">
+      <span class="muted">作ったものは在庫から自動で減ります</span>
+      <button class="primary" onclick="recordText()">記録</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>最近の食事</h2>
+    <ul class="list" id="l-meals"></ul>
+  </div>
+  <div class="card">
+    <h2>最近の買い物</h2>
+    <ul class="list" id="l-buys"></ul>
+  </div>
+</section>
+
+<!-- 在庫 -->
+<section class="page" id="p-stock">
+  <div class="card">
+    <div class="between"><h2>冷蔵庫・棚の在庫</h2><span class="muted" id="s-count"></span></div>
+    <div id="s-list"></div>
+  </div>
+  <div class="card">
+    <h2>手で追加</h2>
+    <div class="row" style="flex-wrap:wrap">
+      <input style="flex:2 1 140px" id="a-name" placeholder="食材名">
+      <input style="flex:1 1 60px" id="a-qty" type="number" inputmode="decimal" placeholder="量">
+      <input style="flex:1 1 60px" id="a-unit" placeholder="単位">
+      <input style="flex:1 1 70px" id="a-price" type="number" inputmode="numeric" placeholder="円">
+      <input style="flex:1 1 130px" id="a-exp" type="date">
+      <button onclick="addItem()">追加</button>
+    </div>
+  </div>
+</section>
+
+<!-- レシピ -->
+<section class="page" id="p-recipe">
+  <div class="card">
+    <h2>レシピを取り込む</h2>
+    <input id="r-in" placeholder="レシピのURL、または料理名（例：鶏むねの照り焼き）">
+    <div class="between" style="margin-top:8px">
+      <label class="muted"><input type="checkbox" id="r-fav" style="width:auto" checked> お気に入りに入れる</label>
+      <button class="primary" onclick="importRecipe()">取り込む</button>
+    </div>
+  </div>
+  <div id="r-list"></div>
+</section>
+
+<!-- 提案 -->
+<section class="page" id="p-idea">
+  <div class="card">
+    <h2>今ある材料で何作る？</h2>
+    <input id="i-in" placeholder="希望があれば（例：さっぱり系／15分で／カレー作りたい）">
+    <div style="margin-top:8px; text-align:right"><button class="primary" onclick="suggest()">提案してもらう</button></div>
+  </div>
+  <div id="i-list"></div>
+</section>
+
+<nav>
+  <button class="on" data-p="home"><b>◎</b>ホーム</button>
+  <button data-p="log"><b>＋</b>記録</button>
+  <button data-p="stock"><b>▤</b>在庫</button>
+  <button data-p="recipe"><b>★</b>レシピ</button>
+  <button data-p="idea"><b>✦</b>提案</button>
+</nav>
+<div id="toast"></div>
+
+<script>
+const API = "/api/meals/";
+const yen = n => "¥" + Math.round(n || 0).toLocaleString();
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $ = id => document.getElementById(id);
+const CATS = ["肉","魚","野菜","果物","卵・乳製品","豆腐・大豆","主食","調味料","冷凍食品","惣菜・弁当","飲料","菓子","日用品","その他"];
+
+// Mac で開いたときは直接、スマホ（公開ページ）では JARVIS の中継（Supabase）を通して Mac に頼む
+const RELAY = !["localhost", "127.0.0.1"].includes(location.hostname);
+const RELAY_URL = "https://lgjguacnsditdemcnvqy.supabase.co/functions/v1/jarvis";
+let relayKey = "";
+if (RELAY) {
+  try { relayKey = location.hash.slice(1) || localStorage.getItem("jarvis_key") || "";  // JARVIS のスマホ画面と同じ合言葉
+    if (location.hash.length > 1) { localStorage.setItem("jarvis_key", relayKey); history.replaceState(null, "", location.pathname); } } catch {}
+}
+async function relay(action, data) {
+  const r = await fetch(`${RELAY_URL}?action=${action}`, data
+    ? {method:"POST", headers:{"Content-Type":"application/json", "x-jarvis-key":relayKey}, body:JSON.stringify(data)}
+    : {headers:{"x-jarvis-key":relayKey}});
+  if (r.status === 403) throw new Error("合言葉付きのURLで開いてください");
+  return r.json();
+}
+async function viaRelay(path, body) {
+  const [p, q] = path.split("?");
+  const query = Object.fromEntries([...new URLSearchParams(q || "")].map(([k, v]) => [k, [v]]));
+  const a = await relay("ask", {kind:"meals", session:"meals", body:{method: body === undefined ? "GET" : "POST", path:p, query, data:body}});
+  if (!a.mac) throw new Error("Macが眠っています。Macを起こしてからもう一度どうぞ");
+  let after = 0;
+  const until = Date.now() + 120000;
+  while (Date.now() < until) {
+    const {events} = await relay(`events&id=${a.id}&after=${after}`);
+    for (const e of events) {
+      after = e.id;
+      if (e.data.error) throw new Error(e.data.error);
+      if ("code" in e.data) {
+        if (e.data.code >= 400) throw new Error(e.data.data.error || "エラー");
+        return e.data.data;
+      }
+    }
+  }
+  throw new Error("時間がかかりすぎたので止めました");
+}
+
+async function api(path, body) {
+  if (RELAY) return viaRelay(path, body);
+  const r = await fetch(API + path, body === undefined ? {} :
+    {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || "エラー");
+  return d;
+}
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("on"), 2600); }
+async function busy(btn, label, fn) {
+  const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="spin"></span>${label}`;
+  try { return await fn(); } catch (e) { toast(e.message); } finally { btn.disabled = false; btn.innerHTML = old; }
+}
+const daysTo = d => Math.round((new Date(d + "T00:00") - new Date(new Date().toDateString())) / 864e5);
+function expTag(d) {
+  if (!d) return "";
+  const n = daysTo(d);
+  const t = n < 0 ? `${-n}日過ぎ` : n === 0 ? "今日まで" : n === 1 ? "明日まで" : `あと${n}日`;
+  return `<span class="tag ${n <= 2 ? "warn" : ""}">${t}</span>`;
+}
+
+// ---------- 画面の切り替え ----------
+const loaders = { home: loadHome, log: loadLog, stock: loadStock, recipe: loadRecipes, idea: () => {} };
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => show(b.dataset.p));
+function show(p) {
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.p === p));
+  document.querySelectorAll(".page").forEach(s => s.classList.toggle("on", s.id === "p-" + p));
+  try { localStorage.setItem("meals-tab", p); } catch {}
+  Promise.resolve(loaders[p]()).catch(e => toast(e.message));
+  scrollTo(0, 0);
+}
+
+// ---------- ホーム ----------
+async function loadHome() {
+  const s = await api("summary"), m = s.month, w = s.week;
+  $("h-food").textContent = yen(m.food);
+  $("h-budget").textContent = "/ " + yen(m.budget);
+  $("h-left").innerHTML = m.left >= 0
+    ? `残り <b>${yen(m.left)}</b><br>1日 ${yen(m.per_day_left)} まで（あと${m.days_left}日）`
+    : `<b style="color:var(--bad)">${yen(-m.left)} 超過</b>`;
+  $("h-meter").classList.toggle("over", m.left < 0);
+  $("h-meter").firstElementChild.style.width = Math.min(100, m.food / m.budget * 100) + "%";
+  $("h-kinds").textContent = Object.entries(m.by_kind).map(([k, v]) => `${k} ${yen(v)}`).join("　") + `　｜ 1日平均 ${yen(m.per_day_used)}`;
+  $("h-week").innerHTML = [["kcal", w.kcal, "kcal"], ["たんぱく質", w.p, "g"], ["脂質", w.f, "g"], ["炭水化物", w.c, "g"]]
+    .map(([k, v, u]) => `<div><b>${v}</b><span>${k}${u === "g" ? "(g)" : ""}</span></div>`).join("")
+    + `<div class="muted" style="grid-column:1/-1">記録 ${w.meals} 食</div>`;
+  $("h-soon").innerHTML = s.expiring.length ? s.expiring.map(i =>
+    `<li class="between"><span>${esc(i.name)} <span class="muted">${i.qty != null ? i.qty + esc(i.unit) : ""}</span></span>${expTag(i.expires)}</li>`).join("")
+    : `<li class="empty">2日以内に期限が来るものはありません</li>`;
+  renderShop(s.shopping);
+}
+function renderShop(list) {
+  $("h-shop").innerHTML = list.length ? list.map(x =>
+    `<li class="between"><label class="row"><input type="checkbox" style="width:auto" onchange="doneShop(${x.id})"> ${esc(x.name)}</label>
+     <span class="muted">${esc(x.note || "")}</span></li>`).join("") : `<li class="empty">空です</li>`;
+}
+async function addShop() {
+  const names = $("shop-in").value.split(/[、,，\s]+/).filter(Boolean);
+  if (!names.length) return;
+  renderShop(await api("shopping_add", {names})); $("shop-in").value = "";
+}
+async function doneShop(id) { await api("update", {table:"shopping", id, fields:{done:1}}); loadHome(); }
+async function editBudget() {
+  const cur = (await api("settings")).budget;
+  const v = prompt("月の食費の予算（円）", cur);
+  if (v && +v > 0) { await api("settings", {budget:+v}); loadHome(); }
+}
+
+// ---------- レシート ----------
+let draft = null;
+function shrink(file) {  // 送る前に縮める（長辺1600px・JPEG）
+  return new Promise((ok, ng) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = img.width * k; c.height = img.height * k;
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      ok(c.toDataURL("image/jpeg", .85).split(",")[1]);
+    };
+    img.onerror = () => ng(new Error("画像を読めませんでした"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function readReceipt(input) {
+  const f = input.files[0]; input.value = "";
+  if (!f) return;
+  $("draft").innerHTML = `<p class="muted"><span class="spin"></span>読み取り中…（10〜20秒）</p>`;
+  try {
+    draft = await api("receipt", {image: await shrink(f), media_type: "image/jpeg"});
+    renderDraft();
+  } catch (e) { $("draft").innerHTML = ""; toast(e.message); }
+}
+function renderDraft() {
+  const d = draft;
+  const opt = (list, v) => list.map(x => `<option ${x === v ? "selected" : ""}>${x}</option>`).join("");
+  $("draft").innerHTML = `
+    <div class="row" style="flex-wrap:wrap; margin:12px 0 8px">
+      <input style="flex:2 1 120px" value="${esc(d.store)}" oninput="draft.store=this.value" placeholder="店">
+      <input style="flex:1 1 130px" type="date" value="${esc(d.date)}" oninput="draft.date=this.value">
+      <select style="flex:1 1 90px" onchange="draft.kind=this.value">${opt(["自炊","外食","コンビニ"], d.kind)}</select>
+    </div>
+    <table class="draft"><tbody>${d.items.map((i, n) => `
+      <tr>
+        <td style="width:24px"><input type="checkbox" title="在庫に入れる" ${i.stock ? "checked" : ""} onchange="draft.items[${n}].stock=this.checked" style="width:auto"></td>
+        <td><input value="${esc(i.name)}" oninput="draft.items[${n}].name=this.value"></td>
+        <td style="width:92px"><select onchange="draft.items[${n}].category=this.value">${opt(CATS, i.category)}</select></td>
+        <td style="width:62px"><input type="number" value="${i.qty ?? ""}" placeholder="量" oninput="draft.items[${n}].qty=this.value===''?null:+this.value"></td>
+        <td style="width:44px"><input value="${esc(i.unit)}" oninput="draft.items[${n}].unit=this.value"></td>
+        <td style="width:66px"><input type="number" value="${i.price}" oninput="draft.items[${n}].price=+this.value;sumDraft()"></td>
+        <td style="width:24px"><button class="small ghost" onclick="draft.items.splice(${n},1);renderDraft()">✕</button></td>
+      </tr>`).join("")}</tbody></table>
+    <div class="between" style="margin-top:10px">
+      <span class="muted" id="d-sum"></span>
+      <span class="row"><button onclick="draft=null;$('draft').innerHTML=''">やめる</button>
+      <button class="primary" onclick="busy(this,'保存中',savePurchase)">保存</button></span>
+    </div>
+    <p class="muted" style="margin:6px 0 0">左のチェック＝在庫に入れる食材（その場で食べたもの・日用品は外す）</p>`;
+  sumDraft();
+}
+function sumDraft() {
+  const s = draft.items.reduce((a, i) => a + (+i.price || 0), 0);
+  $("d-sum").textContent = `品目合計 ${yen(s)}／レシート合計 ${yen(draft.total)}` + (Math.abs(s - draft.total) > 2 ? "（差あり）" : "");
+}
+async function savePurchase() {
+  const r = await api("purchase", draft);
+  draft = null; $("draft").innerHTML = "";
+  toast(`保存しました（食費 ${yen(r.food_total)}）`); loadLog();
+}
+
+// ---------- 一言で記録・履歴 ----------
+async function recordText() {
+  const text = $("rec-in").value.trim();
+  if (!text) return;
+  await busy(event.target, "記録中", async () => {
+    const r = await api("record", {text});
+    $("rec-in").value = "";
+    toast(r.message + (r.meal && r.meal.cost ? `（原価 ${yen(r.meal.cost)}）` : ""));
+    loadLog();
+  });
+}
+async function loadLog() {
+  const [ms, ps] = await Promise.all([api("meals?days=14"), api("purchases")]);
+  $("l-meals").innerHTML = ms.length ? ms.slice(0, 30).map(m => `
+    <li class="between"><span class="grow"><b>${esc(m.name)}</b> <span class="tag">${esc(m.kind)}</span><br>
+      <span class="muted">${m.date.slice(5)} ${esc(m.slot)}・${Math.round(m.kcal || 0)}kcal・P${Math.round(m.p || 0)}g${m.cost ? "・原価" + yen(m.cost) + (m.servings > 1 ? `（${m.servings}人分）` : "") : ""}</span></span>
+      <button class="small ghost" onclick="del('meals',${m.id},loadLog)">✕</button></li>`).join("")
+    : `<li class="empty">まだありません</li>`;
+  $("l-buys").innerHTML = ps.length ? ps.slice(0, 30).map(p => `
+    <li class="between"><span class="grow">${esc(p.store || "（店不明）")} <span class="tag">${esc(p.kind)}</span><br>
+      <span class="muted">${p.date.slice(5)}・食費 ${yen(p.food_total)}${p.total !== p.food_total ? `（合計 ${yen(p.total)}）` : ""}</span></span>
+      <button class="small ghost" onclick="del('purchases',${p.id},loadLog,'この買い物と、そこから入った在庫を消しますか？')">✕</button></li>`).join("")
+    : `<li class="empty">まだありません</li>`;
+}
+async function del(table, id, then, msg) {
+  if (!confirm(msg || "消しますか？")) return;
+  await api("delete", {table, id}); then();
+}
+
+// ---------- 在庫 ----------
+async function loadStock() {
+  const inv = await api("inventory");
+  $("s-count").textContent = inv.length + "品";
+  if (!inv.length) { $("s-list").innerHTML = `<p class="empty">レシートを撮ると在庫が入ります</p>`; return; }
+  const groups = {};
+  inv.forEach(i => (groups[i.category] ||= []).push(i));
+  $("s-list").innerHTML = CATS.filter(c => groups[c]).map(c => `<div class="cat">${c}</div><ul class="list">` +
+    groups[c].map(i => `<li class="between">
+      <span class="grow">${esc(i.name)} ${expTag(i.expires)}<br>
+        <span class="muted">${i.qty != null ? `残り ${+i.qty.toFixed(1)}${esc(i.unit)}` : ""}${i.unit_price && i.qty != null ? `・${yen(i.unit_price * i.qty)}分` : ""}</span></span>
+      ${i.qty != null
+        ? `<span class="row"><button class="small" onclick="setQty(${i.id},${i.qty},-1)">−</button><button class="small" onclick="setQty(${i.id},${i.qty},1)">＋</button>
+           <button class="small ghost" onclick="setStatus(${i.id},'なし')">使い切り</button></span>`
+        : `<span class="seg">${["ある","少ない","なし"].map(s => `<button class="${i.status === s ? "on" : ""}" onclick="setStatus(${i.id},'${s}')">${s}</button>`).join("")}</span>`}
+    </li>`).join("") + `</ul>`).join("");
+}
+async function setQty(id, q, d) {
+  const step = q >= 50 ? 50 : 1;  // g などは50ずつ
+  const v = Math.max(0, q + d * step);
+  await api("update", {table:"items", id, fields: v > 0 ? {qty:v} : {qty:0, status:"なし"}}); loadStock();
+}
+async function setStatus(id, s) {
+  await api("update", {table:"items", id, fields:{status:s}});
+  if (s === "少ない" || s === "なし") {
+    const name = event.target.closest("li").querySelector(".grow").firstChild.textContent.trim();
+    if (confirm(`「${name}」を買い物リストに入れますか？`)) await api("shopping_add", {names:[name]});
+  }
+  loadStock();
+}
+async function addItem() {
+  const name = $("a-name").value.trim();
+  if (!name) return;
+  const qty = $("a-qty").value === "" ? null : +$("a-qty").value;
+  await api("item_add", {name, qty, unit:$("a-unit").value, price:+$("a-price").value || 0,
+    expires:$("a-exp").value || null, category:"その他"});
+  ["a-name","a-qty","a-unit","a-price","a-exp"].forEach(k => $(k).value = "");
+  toast("追加しました"); loadStock();
+}
+
+// ---------- レシピ ----------
+async function importRecipe() {
+  const text = $("r-in").value.trim();
+  if (!text) return;
+  await busy(event.target, "取り込み中", async () => {
+    const r = await api("recipe_import", {text, favorite:$("r-fav").checked});
+    $("r-in").value = ""; toast(`「${r.name}」を登録しました`); loadRecipes();
+  });
+}
+async function loadRecipes() {
+  const rs = await api("recipes");
+  $("r-list").innerHTML = rs.length ? rs.map(r => `
+    <div class="card">
+      <div class="between">
+        <span class="grow"><b>${esc(r.name)}</b>${r.made ? ` <span class="tag">${r.made}回</span>` : ""}<br>
+          <span class="muted">${r.servings}人分・1人${Math.round(r.kcal)}kcal・P${Math.round(r.p)}g</span></span>
+        <button class="small ghost" style="font-size:20px;color:${r.favorite ? "var(--warn)" : "var(--sub)"}"
+          onclick="api('update',{table:'recipes',id:${r.id},fields:{favorite:${r.favorite ? 0 : 1}}}).then(loadRecipes)">${r.favorite ? "★" : "☆"}</button>
+      </div>
+      <details style="margin-top:6px"><summary>材料と作り方</summary>
+        <p class="muted" style="margin:6px 0">${r.ingredients.map(x => `${esc(x.name)} ${esc(x.qty)}`).join("、")}</p>
+        <ol style="margin:0;padding-left:20px;font-size:14px">${r.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol>
+        ${r.url ? `<p class="muted"><a href="${esc(r.url)}" target="_blank" rel="noopener">元のページ</a></p>` : ""}
+      </details>
+      <div class="row" style="margin-top:10px; justify-content:flex-end">
+        <button class="small ghost" onclick="del('recipes',${r.id},loadRecipes)">削除</button>
+        <button class="small" onclick="planRecipe(this, ${JSON.stringify(r.name).replace(/"/g, "&quot;")})">足りない材料</button>
+        <button class="small primary" onclick="cooked(this, ${r.id}, ${JSON.stringify(r.name).replace(/"/g, "&quot;")})">作った</button>
+      </div>
+    </div>`).join("") : `<p class="empty">URLか料理名を入れると登録できます</p>`;
+}
+async function cooked(btn, id, name) {
+  const n = prompt(`「${name}」を何人分作りましたか？`, "1");
+  if (!n) return;
+  await busy(btn, "記録中", async () => {
+    const r = await api("record", {text:`登録レシピ[${id}]「${name}」を${n}人分作って食べた`});
+    toast(r.message + (r.meal && r.meal.cost ? `（原価 ${yen(r.meal.cost)}）` : "")); loadRecipes();
+  });
+}
+function planRecipe(btn, name) { show("idea"); $("i-in").value = `「${name}」を作りたい。足りない材料と原価を出して`; suggest(); }
+
+// ---------- 提案 ----------
+async function suggest() {
+  const btn = document.querySelector("#p-idea button.primary");
+  await busy(btn, "考え中", async () => {
+    const r = await api("suggest", {request:$("i-in").value.trim()});
+    $("i-list").innerHTML = `<p class="muted" style="margin:0 4px 10px">${esc(r.message)}</p>` + r.ideas.map((x, n) => `
+      <div class="card"><div class="idea">
+        <div class="between"><b>${esc(x.name)}</b><span class="muted">1人 約${yen(x.cost_per_serving)}</span></div>
+        <div class="muted">${esc(x.reason)}</div>
+        <div style="margin-top:6px;font-size:13px">使う：${x.uses.map(esc).join("、") || "なし"}</div>
+        ${x.missing.length ? `<div style="font-size:13px;color:var(--warn)">買い足し：${x.missing.map(esc).join("、")}</div>` : ""}
+        <div class="muted" style="font-size:12px">${Math.round(x.kcal)}kcal・P${Math.round(x.p)}g・F${Math.round(x.f)}g・C${Math.round(x.c)}g</div>
+      </div>
+      <div class="row" style="margin-top:10px; justify-content:flex-end">
+        ${x.missing.length ? `<button class="small" onclick="api('shopping_add',{names:IDEAS[${n}].missing,note:IDEAS[${n}].name}).then(()=>toast('買い物リストに入れました'))">買い物リストへ</button>` : ""}
+        ${x.recipe_id ? "" : `<button class="small" onclick="busy(this,'登録中',()=>api('recipe_import',{text:IDEAS[${n}].name,favorite:true}).then(r=>toast('「'+r.name+'」を登録しました')))">レシピに保存</button>`}
+      </div></div>`).join("");
+    window.IDEAS = r.ideas;
+  });
+}
+
+$("today").textContent = new Date().toLocaleDateString("ja-JP", {month:"long", day:"numeric", weekday:"short"});
+let first = "home";
+try { first = localStorage.getItem("meals-tab") || "home"; } catch {}
+show(first);
+</script>
+</body>
+</html>
