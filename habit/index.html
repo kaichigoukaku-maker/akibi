@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="習慣ログ">
+<meta name="robots" content="noindex,nofollow">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>習慣ログ</title>
+<style>
+/* Layout: Apple "inset grouped" home screen — habits column (activity rings → checklist → week → grid) beside today's day view and the week ahead */
+:root{
+  --bg:#f2f2f7; --card:#ffffff; --ink:#1c1c1e; --muted:#8a8a8e; --sep:#e5e5ea; --fill:#ececf0; --tint:#007aff;
+  --wake:#ff9500; --meditate:#30b0c7; --workout:#ff2d55; --read:#5856d6; --breakfast:#a2845e; --good:#34c759;
+  --cal-main:#007aff; --cal-uni:#ff9500; --cal-personal:#f2622e; --cal-asumi:#ff6b9a; --now:#ff3b30;
+  --warn-bg:#fff4e0; --warn-ink:#9a5a00;
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);
+  --sys:-apple-system,BlinkMacSystemFont,"SF Pro Text","Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;
+  --round:ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"Hiragino Maru Gothic ProN","Hiragino Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#000000; --card:#1c1c1e; --ink:#f2f2f7; --muted:#8d8d93; --sep:#38383a; --fill:#2c2c2e; --tint:#0a84ff;
+  --wake:#ff9f0a; --meditate:#40c8e0; --workout:#ff375f; --read:#5e5ce6; --breakfast:#b59469; --good:#30d158;
+  --cal-main:#0a84ff; --cal-uni:#ff9f0a; --cal-personal:#ff7a45; --cal-asumi:#ff7aa5; --now:#ff453a;
+  --warn-bg:#332500; --warn-ink:#ffcc66; --shadow:none; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#000000; --card:#1c1c1e; --ink:#f2f2f7; --muted:#8d8d93; --sep:#38383a; --fill:#2c2c2e; --tint:#0a84ff;
+  --wake:#ff9f0a; --meditate:#40c8e0; --workout:#ff375f; --read:#5e5ce6; --breakfast:#b59469; --good:#30d158;
+  --cal-main:#0a84ff; --cal-uni:#ff9f0a; --cal-personal:#ff7a45; --cal-asumi:#ff7aa5; --now:#ff453a;
+  --warn-bg:#332500; --warn-ink:#ffcc66; --shadow:none; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--sys);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;word-break:auto-phrase;font-feature-settings:"palt" 0}
+.shell{max-width:1200px;margin:0 auto;padding-block:28px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;grid-template-columns:1fr;gap:32px}
+.col{display:flex;flex-direction:column;gap:22px;min-width:0}
+/* desktop: fit one screen, each column scrolls on its own and the day view takes the spare height */
+@media (min-width:920px){
+  html,body{height:100%}
+  .shell{grid-template-columns:minmax(0,420px) minmax(0,1fr);gap:36px;height:100%;padding-block:24px}
+  .col{overflow-y:auto;min-height:0;padding-bottom:24px;scrollbar-width:none}
+  .col::-webkit-scrollbar{display:none}
+  aside.col{overflow:hidden;padding-bottom:0}
+  .col>*{flex-shrink:0}
+  aside .today-box{flex:1 1 auto;min-height:340px}
+  aside .tlscroll{max-height:none;flex:1 1 0;min-height:0}
+  aside .agenda{overflow-y:auto;max-height:26vh}
+}
+.card{background:var(--card);border-radius:16px;box-shadow:var(--shadow)}
+.label{font-size:13px;color:var(--muted);padding:0 16px 6px;text-transform:none;letter-spacing:.01em;display:flex;justify-content:space-between;gap:8px}
+button{font-family:inherit}
+button:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--tint) 45%,transparent);outline-offset:2px}
+
+/* large title */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:0 4px}
+.date{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+h1{font-size:34px;font-weight:700;letter-spacing:-.02em;margin:2px 0 0;line-height:1.1}
+.nav{display:flex;gap:8px}
+.nav button{width:36px;height:36px;border-radius:50%;border:none;background:var(--card);box-shadow:var(--shadow);color:var(--tint);cursor:pointer;display:grid;place-items:center;padding:0}
+.nav svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.nav button:hover:not(:disabled){background:var(--fill)}
+.nav button:disabled{color:var(--muted);opacity:.5;cursor:default}
+
+/* summary rings */
+.summary{display:flex;align-items:center;gap:20px;padding:20px;position:relative;overflow:hidden}
+.rings{width:132px;height:132px;flex:none}
+.rings circle{fill:none;stroke-width:8;stroke-linecap:round}
+.rings .tr{stroke:color-mix(in srgb,var(--c) 18%,transparent)}
+.rings .pr{stroke:var(--c);stroke-dashoffset:var(--len);stroke-dasharray:var(--len);transition:stroke-dashoffset .9s cubic-bezier(.22,1,.36,1)}
+.sumtext{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sumtext .big{font-family:var(--round);font-size:40px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.sumtext .big small{font-size:20px;color:var(--muted);font-weight:600}
+.sumtext .msg{font-size:14px;color:var(--muted);text-wrap:balance}
+.summary.perfect .msg{color:var(--good);font-weight:600}
+#confetti{position:absolute;inset:0;pointer-events:none;width:100%;height:100%}
+
+.warn{background:var(--warn-bg);color:var(--warn-ink);border-radius:12px;padding:11px 14px;font-size:13px;line-height:1.5}
+
+/* checklist rows */
+.list{display:flex;flex-direction:column;overflow:hidden}
+.row{display:grid;grid-template-columns:34px minmax(0,1fr) 30px;align-items:center;gap:12px;padding:12px 16px;border:none;background:transparent;color:var(--ink);text-align:left;cursor:pointer;position:relative;transition:background .15s}
+.row+.row::before,.levels+.row::before{content:"";position:absolute;top:0;left:62px;right:0;border-top:1px solid var(--sep)}
+.row:active{background:var(--fill)}
+.ico{width:34px;height:34px;border-radius:9px;background:var(--c);display:grid;place-items:center}
+.ico svg{width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+.rname{font-size:16px;font-weight:500}
+.rmeta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rmeta b{color:var(--c);font-weight:600}
+.chk{width:28px;height:28px;border-radius:50%;border:2px solid var(--sep);display:grid;place-items:center;transition:background .2s,border-color .2s,transform .2s}
+.chk svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:24;stroke-dashoffset:24;transition:stroke-dashoffset .3s .08s ease-out}
+.row.done .chk{background:var(--c);border-color:var(--c)}
+.row.done .chk svg{stroke-dashoffset:0}
+.row.pop .chk{animation:pop .45s cubic-bezier(.34,1.56,.64,1)}
+.row.multi{cursor:default}
+.row.multi:active{background:transparent}
+.row.multi{grid-template-columns:34px minmax(0,1fr) auto}
+.pills{display:flex;gap:6px}
+.pill{min-width:40px;height:30px;padding:0 10px;border-radius:999px;border:2px solid var(--sep);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:3px;transition:background .2s,border-color .2s,color .2s}
+.pill svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;display:none}
+.pill[aria-pressed="true"]{background:var(--c);border-color:var(--c);color:#fff}
+.pill[aria-pressed="true"] svg{display:block}
+.pill.pop{animation:pop .45s cubic-bezier(.34,1.56,.64,1)}
+.lvchip{display:inline-block;font-size:11px;font-weight:700;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:1px}
+.levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:4px 16px 14px 62px}
+.levels button{border:1.5px solid var(--sep);background:var(--card);border-radius:12px;padding:9px 10px;text-align:left;cursor:pointer;color:var(--ink);display:flex;flex-direction:column;gap:1px;transition:border-color .15s,background .15s}
+.levels button b{font-size:14px;font-weight:600}
+.levels button span{font-size:12px;color:var(--muted)}
+.levels button[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,var(--card))}
+.levels button[aria-pressed="true"] b{color:var(--c)}
+.levels .undo{grid-column:1/-1;border:none;background:transparent;color:var(--muted);text-align:center;font-size:13px;padding:4px}
+@keyframes pop{0%{transform:scale(.6)}60%{transform:scale(1.18)}100%{transform:scale(1)}}
+
+/* week stats */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);padding:16px 8px 14px;border-bottom:1px solid var(--sep);margin:0 0 12px}
+.stat{display:flex;flex-direction:column;align-items:center;gap:2px}
+.stat+.stat{border-left:1px solid var(--sep)}
+.stat b{font-family:var(--round);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.25}
+.stat b small{font-size:14px;font-weight:600;color:var(--muted);margin-left:2px}
+.stat span{font-size:12px;color:var(--muted)}
+.bars{display:flex;flex-direction:column;gap:8px;padding:8px 16px 16px}
+.bar{display:grid;grid-template-columns:44px repeat(7,1fr) 34px;align-items:center;gap:5px;font-size:13px}
+.bar .d{height:20px;border-radius:6px;background:var(--fill)}
+.bar .d.on{background:var(--c)}
+.bar .p{text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+.barhead{display:grid;grid-template-columns:44px repeat(7,1fr) 34px;gap:5px;font-size:11px;color:var(--muted);text-align:center;padding:0 16px}
+.barhead .now{color:var(--tint);font-weight:700}
+
+/* segmented + grid */
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;margin:14px 14px 12px}
+.seg button{flex:1;min-width:0;border:none;background:transparent;color:var(--ink);font-size:12.5px;font-weight:500;padding:6px 2px;white-space:nowrap;border-radius:7px;cursor:pointer;transition:background .2s}
+.seg button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
+.gridwrap{padding:0 14px}
+.grid{display:grid;grid-template-rows:repeat(7,auto);grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px}
+.cell{width:100%;aspect-ratio:1;max-width:100%;border-radius:22%;background:var(--fill);border:none;padding:0;cursor:pointer}
+.cell.future{visibility:hidden}
+.cell.sel{box-shadow:0 0 0 1.5px var(--card),0 0 0 3px var(--tint)}
+.legend{display:flex;justify-content:flex-end;align-items:center;gap:4px;font-size:11px;color:var(--muted);padding:10px 14px 14px}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+.routine{display:flex;flex-direction:column}
+.routine div{display:grid;grid-template-columns:82px minmax(0,1fr);gap:10px;padding:11px 16px;font-size:14px;position:relative}
+.routine div+div::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:1px solid var(--sep)}
+.routine dt{color:var(--muted)}
+.routine dd{margin:0}
+.lvlist{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.lvlist li{font-size:13px;color:var(--muted);line-height:1.45}
+.lvlist b{color:var(--ink);font-weight:600;margin-right:8px}
+.foot{font-size:12px;color:var(--muted);text-align:center;display:flex;align-items:center;justify-content:center;gap:6px}
+.foot i{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.foot.ok i{background:var(--good)}
+
+/* calendar column */
+.clock{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:0 4px}
+.clock b{font-family:var(--round);font-size:52px;font-weight:600;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.callegend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding-bottom:6px}
+.callegend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);margin-right:5px}
+.callegend span.dim::before{opacity:.4}
+.next{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;align-items:center;padding:14px 16px}
+.next .bar4{align-self:stretch;border-radius:2px;background:var(--c)}
+.next small{font-size:12px;color:var(--muted);display:block}
+.next strong{font-size:17px;font-weight:600;display:block;overflow-wrap:anywhere}
+.next .in{font-family:var(--round);font-size:15px;font-weight:600;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);padding:4px 10px;border-radius:999px;white-space:nowrap}
+.today-box{padding:14px 10px 10px 0;display:flex;flex-direction:column;gap:8px}
+.today-h{padding-left:16px;font-size:17px;font-weight:600}
+.alldays{display:flex;flex-wrap:wrap;gap:4px;padding-left:56px}
+.alldays a{background:var(--c);color:#fff;border-radius:6px;padding:2px 8px;font-size:12px;text-decoration:none}
+.alldays a.dim{background:color-mix(in srgb,var(--c) 22%,var(--card));color:var(--ink)}
+.tlscroll{max-height:68vh;overflow-y:auto;position:relative;scrollbar-width:none}
+.tlscroll::-webkit-scrollbar{display:none}
+.tl{position:relative;margin-left:56px;margin-right:4px}
+.hr{position:absolute;left:0;right:0;border-top:1px solid var(--sep)}
+.hr span{position:absolute;left:-52px;top:-8px;width:42px;text-align:right;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.blk{position:absolute;background:color-mix(in srgb,var(--c) 18%,var(--card));color:var(--ink);box-shadow:inset 3px 0 0 var(--c);border-radius:6px;padding:4px 8px 4px 10px;font-size:13px;line-height:1.35;overflow:hidden;text-decoration:none;transition:filter .15s}
+.blk:hover{filter:brightness(.97)}
+.blk .bt{font-weight:600;overflow-wrap:anywhere;color:color-mix(in srgb,var(--c) 55%,var(--ink))}
+.blk .bm{font-size:12px;color:color-mix(in srgb,var(--c) 40%,var(--muted));font-variant-numeric:tabular-nums}
+.blk.short{padding-block:1px}
+.blk.free{background:color-mix(in srgb,var(--c) 9%,var(--card))}
+.blk.past{background:color-mix(in srgb,var(--c) 7%,var(--fill));box-shadow:inset 3px 0 0 color-mix(in srgb,var(--c) 50%,var(--fill))}
+.blk.past .bt{color:var(--muted)}
+.blk.past .bm{color:var(--muted)}
+.blk.dim{background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--c) 10%,var(--card)) 0 6px,var(--card) 6px 12px);box-shadow:inset 3px 0 0 color-mix(in srgb,var(--c) 45%,var(--card))}
+.blk.dim .bt{font-weight:500;color:var(--muted)}
+.blk.dim .bm{color:var(--muted)}
+.nowline{position:absolute;left:-6px;right:0;border-top:2px solid var(--now);z-index:3}
+.nowline::before{content:"";position:absolute;left:-5px;top:-6px;width:10px;height:10px;border-radius:50%;background:var(--now)}
+.agenda{display:flex;flex-direction:column;padding:4px 0}
+.day{padding:12px 16px;display:grid;grid-template-columns:58px minmax(0,1fr);gap:12px;position:relative}
+.day.empty{padding-block:10px;align-items:baseline;grid-template-columns:minmax(0,1fr) auto}
+.day.empty .dlabel{font-size:14px;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.day.empty .none{text-align:right}
+.day+.day::before{content:"";position:absolute;top:0;left:16px;right:0;border-top:1px solid var(--sep)}
+.dlabel{font-size:12px;color:var(--muted)}
+.dlabel b{display:block;font-family:var(--round);font-size:20px;color:var(--ink);line-height:1.15;font-weight:600;font-variant-numeric:tabular-nums}
+.evs{display:flex;flex-direction:column;gap:6px;min-width:0;padding-top:2px}
+.ev{display:grid;grid-template-columns:8px minmax(0,1fr);column-gap:10px;text-decoration:none;color:var(--ink);font-size:14px;line-height:1.35}
+.ev::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--c);grid-row:1;align-self:center}
+.ev:hover .et{color:var(--tint)}
+.ev.free .et,.ev.dim .et{color:var(--muted)}
+.ev.dim::before{opacity:.4}
+.ev .et{grid-column:2;grid-row:1;font-weight:500}
+.ev .tm{grid-column:2;grid-row:2;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.evs{gap:10px}
+.none{font-size:13px;color:var(--muted)}
+.calnote{font-size:12px;color:var(--muted);padding:0 16px}
+.lock{position:fixed;inset:0;z-index:50;background:var(--bg);display:grid;place-items:center;padding:24px max(16px,env(safe-area-inset-left,0px))}
+.lockcard{width:min(360px,100%);padding:28px 24px;display:flex;flex-direction:column;gap:12px}
+.lockcard h2{margin:0;font-size:24px;font-weight:700}
+.lockcard p{margin:0;font-size:14px;color:var(--muted)}
+.lockcard input{font:inherit;font-size:17px;padding:12px 14px;border-radius:12px;border:1.5px solid var(--sep);background:var(--bg);color:var(--ink)}
+.lockcard input:focus{outline:none;border-color:var(--tint)}
+.lockcard button{font:inherit;font-size:17px;font-weight:600;padding:12px;border:none;border-radius:12px;background:var(--tint);color:#fff;cursor:pointer}
+.lockcard .lockmsg{color:var(--now)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.linkbtn{border:none;background:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;padding:4px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+</head>
+<body>
+<div class="lock" id="lock" hidden>
+  <form class="card lockcard" id="lockForm">
+    <h2>習慣ログ</h2>
+    <p>合言葉を入力してください。この端末に記憶されるので、次からは入力不要です。</p>
+    <label for="keyInput" class="sr">合言葉</label>
+    <input id="keyInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="合言葉">
+    <p class="lockmsg" id="lockMsg" hidden></p>
+    <button type="submit">開く</button>
+  </form>
+</div>
+<div class="shell" lang="ja">
+<main class="col">
+  <div class="top">
+    <div>
+      <div class="date" id="dateLine"></div>
+      <h1 id="title">今日</h1>
+    </div>
+    <div class="nav">
+      <button id="prevDay" aria-label="前の日"><svg viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></svg></button>
+      <button id="nextDay" aria-label="次の日"><svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></button>
+    </div>
+  </div>
+
+  <section class="card summary" id="summary">
+    <svg class="rings" viewBox="0 0 132 132" id="rings" aria-hidden="true"></svg>
+    <div class="sumtext">
+      <div class="big" id="count">0<small> / 4</small></div>
+      <div class="msg" id="msg">ひとつずつで大丈夫。</div>
+    </div>
+    <canvas id="confetti"></canvas>
+  </section>
+
+  <div class="warn" id="warn" hidden></div>
+
+  <section>
+    <div class="label"><span>習慣</span><span>タップでチェック</span></div>
+    <div class="card list" id="list"></div>
+  </section>
+
+  <section>
+    <div class="label"><span>この7日間</span><span id="weekRange"></span></div>
+    <div class="card">
+      <div class="stats">
+        <div class="stat"><b id="sRate">0%</b><span>達成率</span></div>
+        <div class="stat"><b id="sPerfect">0</b><span>全部できた日</span></div>
+        <div class="stat"><b id="sBest">0</b><span>最長連続</span></div>
+      </div>
+      <div class="barhead" id="barhead"></div>
+      <div class="bars" id="bars"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span>積み上げ</span><span>過去18週</span></div>
+    <div class="card">
+      <div class="seg" id="tabs" role="group" aria-label="表示する習慣"></div>
+      <div class="gridwrap"><div class="grid" id="grid"></div></div>
+      <div class="legend">少<i data-l="0"></i><i data-l="1"></i><i data-l="2"></i><i data-l="3"></i><i data-l="4"></i>多</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="label"><span>1日の流れ</span><span>2日連続で休まない</span></div>
+    <dl class="card routine">
+      <div><dt>6:50</dt><dd>起床 → カーテンを開ける → 水</dd></div>
+      <div><dt>6:55</dt><dd>瞑想5分</dd></div>
+      <div><dt>7:00</dt><dd>読書15分（MTGの日はMTGの後に）</dd></div>
+      <div><dt>7:15ごろ</dt><dd>朝ごはん</dd></div>
+      <div><dt>夜・風呂前</dt><dd>筋トレ（その日の余裕で選ぶ）
+        <ul class="lvlist">
+          <li><b>フル 10分</b>40秒＋休20秒×10種目</li>
+          <li><b>ガッツリ 5分</b>同じ形で5種目</li>
+          <li><b>そこそこ 2分</b>スクワット30回＋腕立て15回</li>
+          <li><b>継続しよう 30秒</b>スクワット10回</li>
+        </ul></dd></div>
+      <div><dt>23:10</dt><dd>スマホを置いて、布団で読書</dd></div>
+      <div><dt>23:30</dt><dd>就寝</dd></div>
+    </dl>
+  </section>
+
+  <p class="foot" id="sync"><i></i><span>読み込み中…</span></p>
+  <p class="foot"><button class="linkbtn" id="forget">この端末から合言葉を消す</button></p>
+</main>
+
+<aside class="col">
+  <div class="clock"><b id="clock">--:--</b>
+    <div class="callegend">
+      <span style="--c:var(--cal-main)">メイン</span>
+      <span style="--c:var(--cal-uni)">大学授業</span>
+      <span style="--c:var(--cal-personal)">個人的用事</span>
+      <span class="dim" style="--c:var(--cal-asumi)">明日美</span>
+    </div>
+  </div>
+  <div class="card next" id="next" hidden><span class="bar4"></span><div><small id="nextTime"></small><strong id="nextTitle"></strong></div><span class="in" id="nextLabel"></span></div>
+  <div class="card today-box">
+    <div class="today-h" id="todayH">今日</div>
+    <div class="alldays" id="alldays"></div>
+    <div class="tlscroll" id="tlscroll"><div class="tl" id="tl"></div></div>
+  </div>
+  <section class="agenda-sec">
+    <div class="label"><span>これから6日間</span></div>
+    <div class="card agenda" id="agenda"><div class="day"><span></span><p class="none">Googleカレンダーを読み込むと、明日から6日分の予定がここに並びます。</p></div></div>
+  </section>
+  <p class="calnote" id="calnote">カレンダーに接続中…</p>
+</aside>
+</div>
+
+<script>
+const ICONS={
+  wake:'<path d="M7 16a5 5 0 0 1 10 0"/><path d="M12 5v3M5.6 8.6l1.8 1.8M18.4 8.6l-1.8 1.8M3 16h2M19 16h2M3 19.5h18"/>',
+  meditate:'<path d="M12 19c-2.5-2-4-4.4-4-7.2C8 9.6 9.6 7.4 12 5c2.4 2.4 4 4.6 4 6.8 0 2.8-1.5 5.2-4 7.2z"/><path d="M12 19c-3.6 0-7-1.8-8.5-5 2-.6 4-.5 5.6.3M12 19c3.6 0 7-1.8 8.5-5-2-.6-4-.5-5.6.3"/>',
+  read:'<path d="M3 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H3zM21 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z"/>',
+  breakfast:'<path d="M4 10h13v3a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5c0 1.3 1 1.7 1 3M12 3.5c0 1.3 1 1.7 1 3"/>',
+  workout:'<path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/>',
+};
+// read has two parts (morning / night); workout records one of four levels
+const HABITS=[
+  {key:"wake",name:"起床",meta:"6:50に起きる",c:"--wake"},
+  {key:"meditate",name:"瞑想",meta:"朝 5分",c:"--meditate"},
+  {key:"read",name:"読書",meta:"朝・夜 各15分",c:"--read",parts:[["read_am","朝"],["read_pm","夜"]]},
+  {key:"breakfast",name:"朝ごはん",short:"朝食",meta:"7:15ごろ",c:"--breakfast"},
+  {key:"workout",name:"筋トレ",meta:"風呂前・4段階から選ぶ",c:"--workout",
+   levels:[["full","フル","10分"],["hard","ガッツリ","5分"],["mid","そこそこ","2分"],["keep","継続しよう","30秒"]]},
+];
+const LV_WEIGHT={full:4,hard:3,mid:2,keep:1};
+const MSGS=["ひとつずつで大丈夫。","いい滑り出し。","この調子。","半分を超えた。","あとひとつ。","今日は全部できました。"];
+const WD=["日","月","火","水","木","金","土"];
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,"0");
+const keyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const today=()=>{const d=new Date();d.setHours(0,0,0,0);return d};
+const reduceMotion=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const CHECK='<svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+
+let log={};          // { "2026-11-18": {wake:true, read_am:true, workout:"hard", ...} }
+let cur=today();
+let gridHabit="all";
+let col=null;        // db collection, or null for local fallback
+let popKey=null;     // row / pill id that just turned on, for the pop animation
+let levelsOpen=false;
+
+const dayOf=k=>log[k]||{};
+// 0..1 for the ring; older days saved `read:true` before the morning/night split
+function frac(k,h){
+  const d=dayOf(k);
+  if(h==="read"){
+    if(d.read===true&&d.read_am===undefined&&d.read_pm===undefined)return 1;
+    return ((d.read_am?1:0)+(d.read_pm?1:0))/2;
+  }
+  return d[h]?1:0;
+}
+const done=(k,h)=>frac(k,h)>0;
+const countOf=k=>HABITS.filter(h=>done(k,h.key)).length;
+// 0..4 intensity for the contribution grid
+function levelOf(k,h){
+  if(h==="workout"){const v=dayOf(k).workout;return v===true?4:LV_WEIGHT[v]||0}
+  return Math.round(frac(k,h)*4);
+}
+
+function streak(h,end){
+  // streak counts back from `end`; if `end` itself isn't done yet, start from the day before
+  let d=new Date(end); if(!done(keyOf(d),h)) d=addDays(d,-1);
+  let n=0; while(done(keyOf(d),h)){n++;d=addDays(d,-1)}
+  return n;
+}
+function bestStreak(){
+  const keys=Object.keys(log).filter(k=>countOf(k)===HABITS.length).sort();
+  let best=0,run=0,prev=null;
+  for(const k of keys){const d=new Date(k+"T00:00:00");run=(prev&&keyOf(addDays(prev,1))===k)?run+1:1;best=Math.max(best,run);prev=d}
+  return best;
+}
+
+function buildRings(){
+  const svg=$("rings");svg.innerHTML="";
+  HABITS.forEach((h,i)=>{
+    const r=60-i*11.5, len=(2*Math.PI*r).toFixed(1);
+    svg.insertAdjacentHTML("beforeend",
+      `<g transform="rotate(-90 66 66)" style="--c:var(${h.c});--len:${len}"><circle class="tr" cx="66" cy="66" r="${r}"/><circle class="pr" data-k="${h.key}" data-len="${len}" cx="66" cy="66" r="${r}"/></g>`);
+  });
+}
+function renderSummary(){
+  const k=keyOf(cur), n=countOf(k);
+  document.querySelectorAll(".rings .pr").forEach(c=>{c.style.strokeDashoffset=c.dataset.len*(1-frac(k,c.dataset.k))});
+  $("count").innerHTML=`${n}<small> / ${HABITS.length}</small>`;
+  $("msg").textContent=MSGS[n];
+  $("summary").classList.toggle("perfect",n===HABITS.length);
+}
+// rows are built once and updated in place, so the check transitions survive db re-renders
+function buildList(){
+  const L=$("list");
+  for(const h of HABITS){
+    const row=document.createElement(h.parts?"div":"button");
+    row.className="row"+(h.parts?" multi":"");row.id=`row-${h.key}`;
+    row.style.setProperty("--c",`var(${h.c})`);
+    const right=h.parts
+      ?`<span class="pills">${h.parts.map(([f,l])=>`<button class="pill" id="pill-${f}" aria-label="${h.name}（${l}）">${CHECK}${l}</button>`).join("")}</span>`
+      :`<span class="chk">${CHECK}</span>`;
+    row.innerHTML=`<span class="ico"><svg viewBox="0 0 24 24">${ICONS[h.key]}</svg></span><span><div class="rname"></div><div class="rmeta"></div></span>${right}`;
+    row.querySelector(".rname").textContent=h.name;
+    row.addEventListener("animationend",e=>e.target.classList.remove("pop"));
+    if(h.parts){
+      for(const [f] of h.parts){
+        row.querySelector(`#pill-${f}`).onclick=()=>{const on=!dayOf(keyOf(cur))[f];setDay({[f]:on},on?`pill-${f}`:null)};
+      }
+    }else if(h.levels){
+      row.onclick=()=>{levelsOpen=!levelsOpen;renderList()};
+      row.setAttribute("aria-expanded","false");
+    }else{
+      row.onclick=()=>{const on=!done(keyOf(cur),h.key);setDay({[h.key]:on},on?`row-${h.key}`:null)};
+    }
+    L.appendChild(row);
+    if(h.levels){
+      const lv=document.createElement("div");lv.className="levels";lv.id="levels";lv.hidden=true;
+      lv.style.setProperty("--c",`var(${h.c})`);
+      lv.innerHTML=h.levels.map(([v,n,t])=>`<button data-v="${v}"><b>${n}</b><span>${t}</span></button>`).join("")+`<button class="undo" data-v="">記録を取り消す</button>`;
+      lv.querySelectorAll("button").forEach(b=>b.onclick=()=>{
+        const v=b.dataset.v||false, wasOn=done(keyOf(cur),"workout");
+        levelsOpen=false;setDay({workout:v},v&&!wasOn?`row-${h.key}`:null);
+      });
+      L.appendChild(lv);
+    }
+  }
+}
+function renderList(){
+  const k=keyOf(cur), d=dayOf(k);
+  for(const h of HABITS){
+    const row=$(`row-${h.key}`), on=done(k,h.key), s=streak(h.key,cur);
+    row.classList.toggle("done",on);
+    let meta=h.meta;
+    if(h.parts){
+      for(const [f] of h.parts){const p=$(`pill-${f}`),pOn=!!d[f]||(d.read===true&&d[f]===undefined);p.setAttribute("aria-pressed",pOn)}
+    }else row.setAttribute("aria-pressed",on);
+    if(h.levels){
+      const lv=h.levels.find(([v])=>v===d.workout);
+      if(lv)meta=`風呂前<span class="lvchip">${lv[1]} ${lv[2]}</span>`;
+      else if(d.workout===true)meta=`風呂前<span class="lvchip">記録済み</span>`;
+      row.setAttribute("aria-expanded",levelsOpen);
+      const box=$("levels");box.hidden=!levelsOpen;
+      box.querySelectorAll("button[data-v]").forEach(b=>b.setAttribute("aria-pressed",!!b.dataset.v&&b.dataset.v===d.workout));
+      box.querySelector(".undo").hidden=!on;
+    }
+    row.querySelector(".rmeta").innerHTML=s?`<b>${s}日連続</b>・${meta}`:meta;
+  }
+  if(popKey)$(popKey)?.classList.add("pop");
+  popKey=null;
+}
+
+function renderHeader(){
+  const t=today(), diff=Math.round((t-cur)/864e5);
+  $("dateLine").textContent=`${cur.getMonth()+1}月${cur.getDate()}日 ${WD[cur.getDay()]}曜日`;
+  $("title").textContent=diff===0?"今日":diff===1?"昨日":`${diff}日前`;
+  $("nextDay").disabled=diff<=0;
+  // "2日連続で休まない": warn when yesterday was missed and today isn't done yet
+  const y=keyOf(addDays(t,-1)), tk=keyOf(t);
+  const risky=HABITS.filter(h=>!done(y,h.key)&&!done(tk,h.key)&&Object.keys(log).length>0);
+  const w=$("warn");
+  if(diff===0&&risky.length){w.hidden=false;w.textContent=`昨日は${risky.map(h=>h.name).join("・")}がお休みでした。今日1回だけでもやれば、連続で休んだことにはなりません。`}
+  else w.hidden=true;
+}
+
+function renderStats(){
+  const t=today(); let total=0,perfect=0;
+  for(let i=0;i<7;i++){const c=countOf(keyOf(addDays(t,-i)));total+=c;if(c===HABITS.length)perfect++}
+  $("sRate").innerHTML=`${Math.round(total/(7*HABITS.length)*100)}<small>%</small>`;
+  $("sPerfect").innerHTML=`${perfect}<small>日</small>`;
+  $("sBest").innerHTML=`${bestStreak()}<small>日</small>`;
+  const s=addDays(t,-6);
+  $("weekRange").textContent=`${s.getMonth()+1}/${s.getDate()} – ${t.getMonth()+1}/${t.getDate()}`;
+  $("barhead").innerHTML="<span></span>"+[...Array(7)].map((_,i)=>`<span${i===6?' class="now"':""}>${i===6?"今日":WD[addDays(s,i).getDay()]}</span>`).join("")+"<span></span>";
+  $("bars").innerHTML="";
+  for(const h of HABITS){
+    let n=0;const r=document.createElement("div");r.className="bar";r.style.setProperty("--c",`var(${h.c})`);
+    const name=document.createElement("span");name.textContent=h.name;r.appendChild(name);
+    for(let i=0;i<7;i++){const on=done(keyOf(addDays(s,i)),h.key);if(on)n++;const d=document.createElement("span");d.className="d"+(on?" on":"");r.appendChild(d)}
+    r.insertAdjacentHTML("beforeend",`<span class="p">${n}/7</span>`);
+    $("bars").appendChild(r);
+  }
+}
+
+function levelColor(l,cvar){
+  if(l===0)return"var(--fill)";
+  const pct=[0,35,55,78,100][l];
+  return `color-mix(in srgb, var(${cvar}) ${pct}%, var(--fill))`;
+}
+function gridColorVar(){return gridHabit==="all"?"--good":HABITS.find(h=>h.key===gridHabit).c}
+function renderTabs(){
+  $("tabs").innerHTML="";
+  for(const o of [{key:"all",name:"すべて"},...HABITS]){
+    const b=document.createElement("button");b.textContent=o.short||o.name;b.setAttribute("aria-pressed",gridHabit===o.key);
+    b.onclick=()=>{gridHabit=o.key;renderTabs();renderGrid()};$("tabs").appendChild(b);
+  }
+  document.querySelectorAll(".legend i").forEach(i=>i.style.background=levelColor(+i.dataset.l,gridColorVar()));
+}
+function renderGrid(){
+  const t=today(), start=addDays(t,-(17*7+t.getDay())), cvar=gridColorVar();
+  const g=$("grid");g.innerHTML="";
+  for(let i=0;i<18*7;i++){
+    const d=addDays(start,i),k=keyOf(d),c=document.createElement("button");
+    c.className="cell";
+    if(d>t){c.classList.add("future");c.tabIndex=-1}
+    const n=countOf(k), l=gridHabit==="all"?(n?Math.max(1,Math.round(n/HABITS.length*4)):0):levelOf(k,gridHabit);
+    c.style.background=levelColor(l,cvar);
+    if(k===keyOf(cur))c.classList.add("sel");
+    c.title=`${d.getMonth()+1}/${d.getDate()} ${gridHabit==="all"?n+"/"+HABITS.length:(l?"できた":"—")}`;
+    c.setAttribute("aria-label",c.title);
+    c.onclick=()=>{if(d<=t){cur=d;render()}};
+    g.appendChild(c);
+  }
+  g.parentElement.scrollLeft=g.scrollWidth;
+}
+function render(){renderHeader();renderSummary();renderList();renderStats();renderGrid()}
+
+// small confetti burst inside the summary card when the last habit is checked
+function confetti(){
+  if(reduceMotion)return;
+  const cv=$("confetti"),box=cv.getBoundingClientRect(),dpr=devicePixelRatio||1;
+  cv.width=box.width*dpr;cv.height=box.height*dpr;const ctx=cv.getContext("2d");ctx.scale(dpr,dpr);
+  const cs=getComputedStyle(document.documentElement);
+  const cols=HABITS.map(h=>cs.getPropertyValue(h.c).trim());
+  const ps=[...Array(70)].map(()=>({x:66+20,y:box.height/2,vx:(Math.random()*2-0.6)*5,vy:-Math.random()*6-2,r:Math.random()*3+2,c:cols[Math.random()*cols.length|0],rot:Math.random()*6,vr:(Math.random()-.5)*.3}));
+  let f=0;
+  (function step(){
+    ctx.clearRect(0,0,box.width,box.height);
+    for(const p of ps){p.vy+=.18;p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.c;ctx.globalAlpha=Math.max(0,1-f/90);ctx.fillRect(-p.r,-p.r/2,p.r*2,p.r);ctx.restore()}
+    if(++f<90)requestAnimationFrame(step);else ctx.clearRect(0,0,box.width,box.height);
+  })();
+}
+
+function setSync(text,ok){$("sync").querySelector("span").textContent=text;$("sync").classList.toggle("ok",!!ok)}
+
+async function setDay(patch,pop){
+  const k=keyOf(cur), before=countOf(k);
+  const next={...dayOf(k),...patch};
+  if(("read_am" in patch||"read_pm" in patch)&&next.read===true){
+    // splitting an old `read:true` day: keep the other half marked
+    for(const f of ["read_am","read_pm"])if(!(f in patch)&&next[f]===undefined)next[f]=true;
+    delete next.read;
+  }
+  log[k]=next;
+  if(pop){popKey=pop;try{navigator.vibrate?.(12)}catch(e){}}
+  render();
+  if(before<HABITS.length&&countOf(k)===HABITS.length)confetti();
+  saveDay(k,next);
+}
+
+$("prevDay").onclick=()=>{cur=addDays(cur,-1);render()};
+$("nextDay").onclick=()=>{if(cur<today()){cur=addDays(cur,1);render()}};
+
+
+// ---- Google Calendar (main + 大学授業 + 個人的用事, plus 明日美予定 shown faded; shift/import calendars left out on purpose)
+const CALS=[
+  {id:"primary",c:"--cal-main"},
+  {id:"a12e9e3d572004a86757ff1833e8cfcf44e89a9c716fe1331cc432b1845e0899@group.calendar.google.com",c:"--cal-asumi",dim:true},
+  {id:"c29e123ae4d0d2aef3437fc47163c69e3e69adef47f292c7382354c8512aada4@group.calendar.google.com",c:"--cal-uni"},
+  {id:"d2c474c5d1ee6b1af16738ef7c18594f1f44885728ebcd773c47b33c88a491cd@group.calendar.google.com",c:"--cal-personal"},
+];
+const calEvents={};   // calendarId -> events[]
+const hm=d=>`${d.getHours()}:${pad(d.getMinutes())}`;
+const localIso=d=>`${keyOf(d)}T00:00:00`;
+
+function evTimes(e){
+  if(e.start?.dateTime) return {s:new Date(e.start.dateTime),e:new Date(e.end?.dateTime||e.start.dateTime),allDay:false};
+  const s=new Date((e.start?.date||"")+"T00:00:00"), en=new Date((e.end?.date||e.start?.date||"")+"T00:00:00");
+  return {s,e:en,allDay:true};
+}
+function renderCal(){
+  const all=[];
+  for(const cal of CALS) for(const e of calEvents[cal.id]||[]){
+    if(e.status==="cancelled")continue;
+    all.push({...evTimes(e),title:e.summary||"（タイトルなし）",link:e.htmlLink,free:e.transparency==="transparent",c:cal.c,dim:!!cal.dim});
+  }
+  all.sort((a,b)=>a.allDay===b.allDay?a.s-b.s:a.allDay?-1:1);
+  const now=new Date(), t=today(), ag=$("agenda");
+  renderTimeline(all,now,t);
+  ag.innerHTML="";
+  const md=d=>`${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）`;
+  let emptyRun=[];
+  const flushEmpty=()=>{
+    if(!emptyRun.length)return;
+    const row=document.createElement("div");row.className="day empty";
+    const a=emptyRun[0],b=emptyRun[emptyRun.length-1];
+    row.innerHTML=`<div class="dlabel"></div><span class="none">予定なし</span>`;
+    row.querySelector(".dlabel").textContent=emptyRun.length>1?`${md(a)} – ${md(b)}`:md(a);
+    ag.appendChild(row);emptyRun=[];
+  };
+  for(let i=1;i<7;i++){
+    const d=addDays(t,i), dEnd=addDays(d,1);
+    const evs=all.filter(x=>x.s<dEnd&&x.e>d&&!(x.allDay&&x.e<=d));
+    if(!evs.length){emptyRun.push(d);continue}
+    flushEmpty();
+    const row=document.createElement("div");row.className="day";
+    row.innerHTML=`<div class="dlabel"><b>${d.getMonth()+1}/${d.getDate()}</b>${i===1?"明日・":""}${WD[d.getDay()]}</div><div class="evs"></div>`;
+    const box=row.querySelector(".evs");
+    for(const x of evs){
+      const a=document.createElement("a");
+      a.className="ev"+(x.free?" free":"")+(x.dim?" dim":"");
+      a.style.setProperty("--c",`var(${x.c})`);
+      if(x.link){a.href=x.link;a.target="_blank";a.rel="noopener"}
+      a.innerHTML=`<span class="et"></span><span class="tm"></span>`;
+      a.querySelector(".tm").textContent=x.allDay?"終日":`${hm(x.s)}–${hm(x.e)}`;
+      a.querySelector(".et").textContent=x.title;
+      box.appendChild(a);
+    }
+    ag.appendChild(row);
+  }
+  flushEmpty();
+  // next (or current) busy event of my own
+  const nx=all.find(x=>!x.allDay&&!x.free&&!x.dim&&x.e>now);
+  if(nx){
+    $("next").hidden=false;$("next").style.setProperty("--c",`var(${nx.c})`);
+    const mins=Math.round((nx.s-now)/60000);
+    $("nextLabel").textContent=nx.s<=now?"進行中":mins<60?`${mins}分後`:mins<24*60?`${Math.floor(mins/60)}時間後`:`${Math.round(mins/1440)}日後`;
+    $("nextTitle").textContent=nx.title;
+    const dd=Math.round((new Date(nx.s).setHours(0,0,0,0)-t)/864e5);
+    const when=dd<=0?"今日":dd===1?"明日":`${nx.s.getMonth()+1}/${nx.s.getDate()}（${WD[nx.s.getDay()]}）`;
+    $("nextTime").textContent=`${nx.s<=now?"いまの予定":"次の予定"}・${when} ${hm(nx.s)}–${hm(nx.e)}`;
+  }else $("next").hidden=true;
+}
+
+// Today as a day view: hour grid, overlapping events split into columns, red "now" line
+const HOUR_PX=52;
+let tlScrolled=false;
+function renderTimeline(all,now,t){
+  const tEnd=addDays(t,1);
+  $("todayH").textContent=`今日の予定`;
+  const allDay=all.filter(x=>x.allDay&&x.s<tEnd&&x.e>t);
+  const ad=$("alldays");ad.innerHTML="";
+  for(const x of allDay){const a=document.createElement("a");if(x.dim)a.className="dim";a.style.setProperty("--c",`var(${x.c})`);a.textContent=x.title;if(x.link){a.href=x.link;a.target="_blank";a.rel="noopener"}ad.appendChild(a)}
+  const evs=all.filter(x=>!x.allDay&&x.s<tEnd&&x.e>t).map(x=>({...x,
+    a:Math.max(0,(x.s-t)/36e5), b:Math.min(24,(x.e-t)/36e5)}));
+  const startH=Math.min(6,...evs.map(x=>Math.floor(x.a)));
+  const tl=$("tl");tl.innerHTML="";tl.style.height=`${(24-startH)*HOUR_PX}px`;
+  for(let h=startH;h<=24;h++){const r=document.createElement("div");r.className="hr";r.style.top=`${(h-startH)*HOUR_PX}px`;if(h<24)r.innerHTML=`<span>${h}:00</span>`;tl.appendChild(r)}
+  // group overlapping events into clusters, then give each a column inside its cluster
+  evs.sort((p,q)=>p.a-q.a||q.b-p.b);
+  let cluster=[],clusterEnd=-1;
+  const flush=()=>{
+    const colsEnd=[];
+    for(const x of cluster){let c=colsEnd.findIndex(e=>e<=x.a);if(c<0){c=colsEnd.length;colsEnd.push(0)}colsEnd[c]=x.b;x.col=c}
+    cluster.forEach(x=>x.ncol=colsEnd.length);cluster=[];
+  };
+  for(const x of evs){if(x.a>=clusterEnd&&cluster.length)flush();cluster.push(x);clusterEnd=Math.max(clusterEnd,x.b)}
+  if(cluster.length)flush();
+  for(const x of evs){
+    const top=(x.a-startH)*HOUR_PX, h=Math.max(22,(x.b-x.a)*HOUR_PX);
+    const a=document.createElement("a");
+    a.className="blk"+(h<40?" short":"")+(x.free?" free":"")+(x.dim?" dim":"")+(x.e<now?" past":"");
+    a.style.setProperty("--c",`var(${x.c})`);
+    a.style.top=`${top+1}px`;a.style.height=`${h-2}px`;
+    a.style.left=`${x.col/x.ncol*100}%`;a.style.width=`calc(${100/x.ncol}% - 3px)`;
+    if(x.link){a.href=x.link;a.target="_blank";a.rel="noopener"}
+    a.innerHTML=h<40?`<div class="bt"></div>`:`<div class="bt"></div><div class="bm"></div>`;
+    const time=`${hm(x.s)}–${hm(x.e)}`;
+    a.querySelector(".bt").textContent=h<40?`${x.title}、${hm(x.s)}`:x.title;
+    if(h>=40)a.querySelector(".bm").textContent=time;
+    a.title=`${x.title}\n${time}`;
+    tl.appendChild(a);
+  }
+  const nowH=(now-t)/36e5;
+  if(nowH>=startH&&nowH<=24){const n=document.createElement("div");n.className="nowline";n.style.top=`${(nowH-startH)*HOUR_PX}px`;tl.appendChild(n)}
+  // scroll to "now" once, after layout has settled (the agenda below changes the box height)
+  if(!tlScrolled){tlScrolled=true;setTimeout(()=>{$("tlscroll").scrollTop=Math.max(0,(nowH-startH-1.5)*HOUR_PX)},300)}
+}
+function tickClock(){const n=new Date();$("clock").textContent=`${n.getHours()}:${pad(n.getMinutes())}`}
+tickClock();setInterval(()=>{tickClock();if(Object.keys(calEvents).length)renderCal()},30000);
+
+
+buildRings();buildList();renderTabs();
+// ---- 公開版：記録とカレンダーは Supabase の関数 habit 経由。合言葉はこの端末の localStorage にだけ保存
+const API="https://lgjguacnsditdemcnvqy.supabase.co/functions/v1/habit";
+let KEY="";try{KEY=localStorage.getItem("habit_key")||""}catch(e){}
+let pending=0;       // 保存中は、読み込んだ記録で手元の変更を上書きしない
+async function api(action,{method="GET",query="",body}={}){
+  const r=await fetch(`${API}?action=${action}${query}`,{method,
+    headers:{"x-habit-key":KEY,...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined});
+  if(r.status===401){showLock("合言葉が違います。もう一度入力してください。");throw new Error("unauthorized")}
+  if(!r.ok)throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+function cacheLog(){try{localStorage.setItem("habitlog",JSON.stringify(log))}catch(e){}}
+async function saveDay(k,data){
+  cacheLog();pending++;
+  try{await api("set",{method:"POST",body:{day:k,data}});setSync("同期済み",true)}
+  catch(e){if(e.message!=="unauthorized")setSync("保存できませんでした。通信を確認して、もう一度タップしてください",false)}
+  finally{pending--}
+}
+async function loadLog(){
+  try{const d=await api("log");if(pending)return;log=d.log||{};cacheLog();setSync("同期済み",true);render()}
+  catch(e){if(e.message!=="unauthorized")setSync("同期できませんでした。端末に残っている記録を表示しています",false)}
+}
+async function loadCal(){
+  try{
+    const d=await api("cal",{query:`&start=${localIso(today())}&end=${localIso(addDays(today(),7))}`});
+    for(const cal of CALS)calEvents[cal.id]=d.cals?.[cal.id]||[];
+    $("calnote").textContent=`Googleカレンダーと同期中（${hm(new Date())}に更新・5分ごと）`;renderCal();
+  }catch(e){if(e.message!=="unauthorized")$("calnote").textContent="カレンダーを更新できませんでした。少し待つと自動で再試行します"}
+}
+function startSync(){loadLog();loadCal()}
+function showLock(msg){$("lock").hidden=false;$("lockMsg").textContent=msg||"";$("lockMsg").hidden=!msg;setTimeout(()=>$("keyInput").focus(),50)}
+$("lockForm").addEventListener("submit",e=>{
+  e.preventDefault();
+  const v=$("keyInput").value.trim();if(!v)return;
+  KEY=v;try{localStorage.setItem("habit_key",v)}catch(err){}
+  $("keyInput").value="";$("lock").hidden=true;startSync();
+});
+$("forget").onclick=()=>{try{localStorage.removeItem("habit_key")}catch(e){}KEY="";showLock("この端末から合言葉を消しました。")};
+
+try{log=JSON.parse(localStorage.getItem("habitlog")||"{}")}catch(e){log={}}
+render();
+if(KEY)startSync();else showLock();
+setInterval(()=>{if(KEY&&!document.hidden)loadLog()},60000);
+setInterval(()=>{if(KEY&&!document.hidden)loadCal()},300000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&KEY)startSync()});
+</script>
+
+</body>
+</html>
