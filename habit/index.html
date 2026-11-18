@@ -102,13 +102,26 @@ h1{font-size:34px;font-weight:700;letter-spacing:-.02em;margin:2px 0 0;line-heig
 .pill[aria-pressed="true"] svg{display:block}
 .pill.pop{animation:pop .45s cubic-bezier(.34,1.56,.64,1)}
 .lvchip{display:inline-block;font-size:11px;font-weight:700;color:var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:1px}
-.levels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:4px 16px 14px 62px}
-.levels button{border:1.5px solid var(--sep);background:var(--card);border-radius:12px;padding:9px 10px;text-align:left;cursor:pointer;color:var(--ink);display:flex;flex-direction:column;gap:1px;transition:border-color .15s,background .15s}
-.levels button b{font-size:14px;font-weight:600}
-.levels button span{font-size:12px;color:var(--muted)}
-.levels button[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,var(--card))}
-.levels button[aria-pressed="true"] b{color:var(--c)}
-.levels .undo{grid-column:1/-1;border:none;background:transparent;color:var(--muted);text-align:center;font-size:13px;padding:4px}
+.levels{display:flex;flex-direction:column;gap:10px;padding:4px 16px 14px 62px}
+.lvgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.lvgrid button{border:1.5px solid var(--sep);background:var(--card);border-radius:12px;padding:9px 10px;text-align:left;cursor:pointer;color:var(--ink);display:flex;flex-direction:column;gap:1px;transition:border-color .15s,background .15s}
+.lvgrid button b{font-size:14px;font-weight:600}
+.lvgrid button span{font-size:12px;color:var(--muted)}
+.lvgrid button[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 10%,var(--card))}
+.lvgrid button[aria-pressed="true"] b{color:var(--c)}
+.lvgrid button.logged span::after{content:" ・記録済み";color:var(--c);font-weight:600}
+.lvdetail{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:14px;background:var(--bg)}
+.vid{position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:#000}
+.vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.exlist{margin:0;padding-left:22px;font-size:13px;line-height:1.6;color:var(--ink)}
+.exlist.cols{columns:2;column-gap:20px}
+.exlist li{break-inside:avoid}
+.exlist li::marker{color:var(--muted);font-variant-numeric:tabular-nums}
+.credit{margin:0;font-size:11px;color:var(--muted)}
+.credit a{color:var(--muted)}
+.rec{border:none;border-radius:12px;padding:12px;background:var(--c);color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+.rec:disabled{background:color-mix(in srgb,var(--c) 18%,var(--card));color:var(--c);cursor:default}
+.levels .undo{border:none;background:transparent;color:var(--muted);text-align:center;font-size:13px;padding:4px}
 @keyframes pop{0%{transform:scale(.6)}60%{transform:scale(1.18)}100%{transform:scale(1)}}
 
 /* week stats */
@@ -287,12 +300,12 @@ h1{font-size:34px;font-weight:700;letter-spacing:-.02em;margin:2px 0 0;line-heig
       <div><dt>6:55</dt><dd>瞑想5分</dd></div>
       <div><dt>7:00</dt><dd>読書15分（MTGの日はMTGの後に）</dd></div>
       <div><dt>7:15ごろ</dt><dd>朝ごはん</dd></div>
-      <div><dt>夜・風呂前</dt><dd>筋トレ（その日の余裕で選ぶ）
+      <div><dt>夜・風呂前</dt><dd>筋トレ（その日の余裕で選ぶ。上半身・動画は段階を選ぶと見られる）
         <ul class="lvlist">
-          <li><b>フル 10分</b>40秒＋休20秒×10種目</li>
-          <li><b>ガッツリ 5分</b>同じ形で5種目</li>
-          <li><b>そこそこ 2分</b>スクワット30回＋腕立て15回</li>
-          <li><b>継続しよう 30秒</b>スクワット10回</li>
+          <li><b>フル 10分</b>上半身20種目（林慧亮さんの動画）</li>
+          <li><b>ガッツリ 5分</b>胸と腕の6種目（まめたまさんの4分動画）</li>
+          <li><b>そこそこ 2分</b>腕立てで胸を追い込む（まめたまさんの2分動画）</li>
+          <li><b>継続しよう 30秒</b>腕立て伏せ10回（膝つきOK）</li>
         </ul></dd></div>
       <div><dt>23:10</dt><dd>スマホを置いて、布団で読書</dd></div>
       <div><dt>23:30</dt><dd>就寝</dd></div>
@@ -341,7 +354,11 @@ const HABITS=[
   {key:"read",name:"読書",meta:"朝・夜 各15分",c:"--read",parts:[["read_am","朝"],["read_pm","夜"]]},
   {key:"breakfast",name:"朝ごはん",short:"朝食",meta:"7:15ごろ",c:"--breakfast"},
   {key:"workout",name:"筋トレ",meta:"風呂前・4段階から選ぶ",c:"--workout",
-   levels:[["full","フル","10分"],["hard","ガッツリ","5分"],["mid","そこそこ","2分"],["keep","継続しよう","30秒"]]},
+   levels:[
+     ["full","フル","10分","u9jxybenMyg","林慧亮 / uFit代表",["プッシュアップ","パイクプッシュアップ","サイドレイズ＆フロントレイズ","ショルダープレス","インチワーム","スーパーマン","スノーエンジェル","サイドプランク・ヒップレイズ（右）","サイドプランク・ヒップレイズ（左）","バイシクルクランチ","プランクローテーション","プランクアップダウン","ショルダータッププランク","逆手プッシュアップ","アームサークル（横）","アームサークル（上）","片腕横プッシュアップ（右）","片腕横プッシュアップ（左）","三頭筋リフト","リバースプッシュアップ"]],
+     ["hard","ガッツリ","5分","-G6ugmVK1JI","まめたまの筋トレ日記",["ワイドプッシュアップ","レッグアームカール","リバースプッシュアップ","バックリバースプッシュアップ","プッシュアップ","プランクプッシュアップ"]],
+     ["mid","そこそこ","2分","sfNwsNq4ycM","まめたまの筋トレ日記",["プッシュアップ","バウンドプッシュアップ","膝付きプッシュアップ","膝付きプッシュアップキープ","プッシュアップ","バウンドプッシュアップ"]],
+     ["keep","継続しよう","30秒",null,null,["腕立て伏せ10回（膝つきOK）"]]]},
 ];
 const LV_WEIGHT={full:4,hard:3,mid:2,keep:1};
 const MSGS=["ひとつずつで大丈夫。","いい滑り出し。","この調子。","半分を超えた。","あとひとつ。","今日は全部できました。"];
@@ -360,6 +377,7 @@ let gridHabit="all";
 let col=null;        // db collection, or null for local fallback
 let popKey=null;     // row / pill id that just turned on, for the pop animation
 let levelsOpen=false;
+let lvView=null;     // 段階画面で表示中の段階（見るだけでは記録しない）
 
 const dayOf=k=>log[k]||{};
 // 0..1 for the ring; older days saved `read:true` before the morning/night split
@@ -425,7 +443,7 @@ function buildList(){
         row.querySelector(`#pill-${f}`).onclick=()=>{const on=!dayOf(keyOf(cur))[f];setDay({[f]:on},on?`pill-${f}`:null)};
       }
     }else if(h.levels){
-      row.onclick=()=>{levelsOpen=!levelsOpen;renderList()};
+      row.onclick=()=>{if(levelsOpen)closeLevels();else{levelsOpen=true;lvView=dayOf(keyOf(cur)).workout||null}renderList()};
       row.setAttribute("aria-expanded","false");
     }else{
       row.onclick=()=>{const on=!done(keyOf(cur),h.key);setDay({[h.key]:on},on?`row-${h.key}`:null)};
@@ -434,15 +452,44 @@ function buildList(){
     if(h.levels){
       const lv=document.createElement("div");lv.className="levels";lv.id="levels";lv.hidden=true;
       lv.style.setProperty("--c",`var(${h.c})`);
-      lv.innerHTML=h.levels.map(([v,n,t])=>`<button data-v="${v}"><b>${n}</b><span>${t}</span></button>`).join("")+`<button class="undo" data-v="">記録を取り消す</button>`;
-      lv.querySelectorAll("button").forEach(b=>b.onclick=()=>{
-        const v=b.dataset.v||false, wasOn=done(keyOf(cur),"workout");
-        levelsOpen=false;setDay({workout:v},v&&!wasOn?`row-${h.key}`:null);
-      });
+      lv.innerHTML=`<div class="lvgrid">${h.levels.map(([v,n,t])=>`<button data-v="${v}"><b>${n}</b><span>${t}</span></button>`).join("")}</div>
+        <div class="lvdetail" id="lvdetail" hidden>
+          <div class="vid" id="lvvid"></div>
+          <ol class="exlist" id="lvex"></ol>
+          <p class="credit" id="lvcredit"></p>
+          <button class="rec" id="lvrec"></button>
+        </div>
+        <button class="undo">記録を取り消す</button>`;
+      lv.querySelectorAll(".lvgrid button").forEach(b=>b.onclick=()=>{lvView=b.dataset.v;renderList()});
+      lv.querySelector("#lvrec").onclick=()=>{
+        const v=lvView, wasOn=done(keyOf(cur),"workout");
+        if(!v)return;
+        closeLevels();setDay({workout:v},wasOn?null:`row-${h.key}`);
+      };
+      lv.querySelector(".undo").onclick=()=>{closeLevels();setDay({workout:false})};
       L.appendChild(lv);
     }
   }
 }
+// 段階の中身：動画（YouTube の公式埋め込み）・種目の一覧・記録ボタン
+function renderLevelDetail(h,d){
+  const det=$("lvdetail"), vid=$("lvvid"), lv=h.levels.find(([v])=>v===lvView);
+  det.hidden=!levelsOpen||!lv;
+  if(det.hidden){vid.innerHTML="";vid.dataset.id="";return}
+  const [v,name,time,yt,author,ex]=lv;
+  if(vid.dataset.id!==(yt||"")){
+    vid.dataset.id=yt||"";
+    vid.innerHTML=yt?`<iframe src="https://www.youtube.com/embed/${yt}?playsinline=1&rel=0&origin=${encodeURIComponent(location.origin)}" title="${name} ${time}の動画" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`:"";
+  }
+  vid.hidden=!yt;
+  $("lvex").innerHTML="";
+  for(const e of ex){const li=document.createElement("li");li.textContent=e;$("lvex").appendChild(li)}
+  $("lvex").classList.toggle("cols",ex.length>8);
+  $("lvcredit").innerHTML=yt?`動画：${author}（<a href="https://www.youtube.com/watch?v=${yt}" target="_blank" rel="noopener">YouTubeで開く</a>）`:"";
+  $("lvrec").textContent=d.workout===v?`記録済み：${name} ${time}`:`「${name} ${time}」をやった`;
+  $("lvrec").disabled=d.workout===v;
+}
+function closeLevels(){levelsOpen=false;lvView=null}
 function renderList(){
   const k=keyOf(cur), d=dayOf(k);
   for(const h of HABITS){
@@ -458,7 +505,11 @@ function renderList(){
       else if(d.workout===true)meta=`風呂前<span class="lvchip">記録済み</span>`;
       row.setAttribute("aria-expanded",levelsOpen);
       const box=$("levels");box.hidden=!levelsOpen;
-      box.querySelectorAll("button[data-v]").forEach(b=>b.setAttribute("aria-pressed",!!b.dataset.v&&b.dataset.v===d.workout));
+      box.querySelectorAll(".lvgrid button").forEach(b=>{
+        b.setAttribute("aria-pressed",b.dataset.v===lvView);
+        b.classList.toggle("logged",b.dataset.v===d.workout);
+      });
+      renderLevelDetail(h,d);
       box.querySelector(".undo").hidden=!on;
     }
     row.querySelector(".rmeta").innerHTML=s?`<b>${s}日連続</b>・${meta}`:meta;
@@ -474,7 +525,8 @@ function renderHeader(){
   $("nextDay").disabled=diff<=0;
   // "2日連続で休まない": warn when yesterday was missed and today isn't done yet
   const y=keyOf(addDays(t,-1)), tk=keyOf(t);
-  const risky=HABITS.filter(h=>!done(y,h.key)&&!done(tk,h.key)&&Object.keys(log).length>0);
+  const started=Object.keys(log).some(k=>k<y);   // 使い始めの日は「昨日お休み」と言わない
+  const risky=started?HABITS.filter(h=>!done(y,h.key)&&!done(tk,h.key)):[];
   const w=$("warn");
   if(diff===0&&risky.length){w.hidden=false;w.textContent=`昨日は${risky.map(h=>h.name).join("・")}がお休みでした。今日1回だけでもやれば、連続で休んだことにはなりません。`}
   else w.hidden=true;
@@ -492,7 +544,7 @@ function renderStats(){
   $("bars").innerHTML="";
   for(const h of HABITS){
     let n=0;const r=document.createElement("div");r.className="bar";r.style.setProperty("--c",`var(${h.c})`);
-    const name=document.createElement("span");name.textContent=h.name;r.appendChild(name);
+    const name=document.createElement("span");name.textContent=h.short||h.name;r.appendChild(name);
     for(let i=0;i<7;i++){const on=done(keyOf(addDays(s,i)),h.key);if(on)n++;const d=document.createElement("span");d.className="d"+(on?" on":"");r.appendChild(d)}
     r.insertAdjacentHTML("beforeend",`<span class="p">${n}/7</span>`);
     $("bars").appendChild(r);
